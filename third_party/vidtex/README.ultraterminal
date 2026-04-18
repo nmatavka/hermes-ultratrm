@@ -1,0 +1,25 @@
+UltraTerminal Videotex Integration
+==================================
+
+This subtree contains the UltraTerminal-facing Videotex runtime derived from
+the local vidtex-master source tree. The upstream project is a GPLv3 ncurses
+Viewdata/Videotex-over-IP client. UltraTerminal keeps the protocol decoder,
+Mode 7 character mapping, built-in service profile data, raw frame capture
+state, and keyboard transforms, but replaces the ncurses/socket frontend with
+an in-process runtime that renders into UltraTerminal's existing text and
+attribute buffers.
+
+Files copied verbatim:
+
+* COPYING
+* UPSTREAM-README.md
+* vidtexrc
+
+Adapted runtime files:
+
+* ultra_vidtex.h
+* ultra_vidtex.c
+
+The copied/adapted Videotex code remains under GPLv3 terms from the upstream
+vidtex source. Commercial/private distribution clearance is intentionally not
+encoded in the build system; that decision remains external to the port.

@@ -1,0 +1,50 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 30,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "macos-wine-x64-base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "toolchainFile": "${sourceDir}/cmake/toolchains/llvm-mingw-x64.cmake",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "ULTRATERMINAL_ENABLE_HTML_HELP": "ON",
+        "ULTRATERMINAL_STRICT_FEATURES": "ON",
+        "ULTRATERMINAL_BUILD_LEGACY_CNCTSTD": "OFF",
+        "ULTRATERMINAL_ENABLE_TN3270": "ON",
+        "ULTRATERMINAL_ENABLE_TN3270_TLS": "ON",
+        "ULTRATERMINAL_BUILD_TN3270_OPENSSL": "ON"
+      }
+    },
+    {
+      "name": "macos-wine-x64-debug",
+      "inherits": "macos-wine-x64-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "macos-wine-x64-release",
+      "inherits": "macos-wine-x64-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "macos-wine-x64-debug",
+      "configurePreset": "macos-wine-x64-debug"
+    },
+    {
+      "name": "macos-wine-x64-release",
+      "configurePreset": "macos-wine-x64-release"
+    }
+  ]
+}

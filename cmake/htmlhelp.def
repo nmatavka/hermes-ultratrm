@@ -1,0 +1,5 @@
+LIBRARY hhctrl.ocx
+
+EXPORTS
+    HtmlHelpA
+    HtmlHelpW

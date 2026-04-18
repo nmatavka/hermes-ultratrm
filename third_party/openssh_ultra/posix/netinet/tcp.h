@@ -1,0 +1,10 @@
+#ifndef ULTRATERMINAL_OPENSSH_POSIX_NETINET_TCP_H
+#define ULTRATERMINAL_OPENSSH_POSIX_NETINET_TCP_H
+
+#include <winsock2.h>
+
+#ifndef TCP_NODELAY
+#define TCP_NODELAY 1
+#endif
+
+#endif

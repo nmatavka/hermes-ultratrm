@@ -1,0 +1,10 @@
+#ifndef ULTRATERMINAL_POSIX_NETINET_IP_H
+#define ULTRATERMINAL_POSIX_NETINET_IP_H
+
+#define IPTOS_LOWDELAY          0x10
+#define IPTOS_THROUGHPUT        0x08
+#define IPTOS_RELIABILITY       0x04
+#define IPTOS_LOWCOST           0x02
+#define IPTOS_MINCOST           IPTOS_LOWCOST
+
+#endif

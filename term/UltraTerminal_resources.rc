@@ -1,0 +1,6 @@
+#include "term.rc"
+#include "dialogs.rc"
+#include "../cncttapi/cncttapi.rc"
+#include "../emu/emudlgs.rc"
+#include "tables.rc"
+#include "ver_dll.rc"

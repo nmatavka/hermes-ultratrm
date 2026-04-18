@@ -1,0 +1,33 @@
+#ifndef ULTRATERMINAL_RC_WINVER_H
+#define ULTRATERMINAL_RC_WINVER_H
+
+#ifndef VS_VERSION_INFO
+#define VS_VERSION_INFO 1
+#endif
+
+#ifndef VS_FFI_FILEFLAGSMASK
+#define VS_FFI_FILEFLAGSMASK 0x0000003FL
+#endif
+
+#ifndef VS_FF_DEBUG
+#define VS_FF_DEBUG 0x00000001L
+#endif
+#ifndef VS_FF_PRERELEASE
+#define VS_FF_PRERELEASE 0x00000002L
+#endif
+
+#ifndef VOS__WINDOWS32
+#define VOS__WINDOWS32 0x00000004L
+#endif
+
+#ifndef VFT_APP
+#define VFT_APP 0x00000001L
+#endif
+#ifndef VFT_DLL
+#define VFT_DLL 0x00000002L
+#endif
+#ifndef VFT2_UNKNOWN
+#define VFT2_UNKNOWN 0x00000000L
+#endif
+
+#endif
