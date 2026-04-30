@@ -4,9 +4,11 @@ set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
 
 set(_ultraterminal_tool_prefix "x86_64-w64-mingw32")
 set(ULTRATERMINAL_LLVM_MINGW_ROOT "$ENV{LLVM_MINGW_ROOT}" CACHE PATH "Path to the llvm-mingw installation root.")
+get_filename_component(_ultraterminal_repo_root "${CMAKE_CURRENT_LIST_DIR}/../.." ABSOLUTE)
 
 set(_ultraterminal_search_roots
     "${ULTRATERMINAL_LLVM_MINGW_ROOT}"
+    "${_ultraterminal_repo_root}/.tools/llvm-mingw"
     "/opt/homebrew/opt/llvm-mingw"
     "/usr/local/opt/llvm-mingw"
     "/opt/homebrew"

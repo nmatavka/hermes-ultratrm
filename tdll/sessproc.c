@@ -26,6 +26,7 @@
 #include "file_msc.h"
 #include "errorbox.h"
 #include "load_res.h"
+#include "rexxhapi.h"
 #include "sf.h"
 
 #include <tdll/cloop.h>
@@ -276,6 +277,9 @@ LRESULT CALLBACK SessProc(HWND hwnd, UINT uMsg, WPARAM wPar, LPARAM lPar)
 			SendDlgItemMessage(hwnd, IDC_TERMINAL_WIN, WM_SIZE, 0, 0);
 			return 0;
 
+		case WM_REXXHAPI_CALL:
+			return utRexxHapiDispatchSessionCall(lPar);
+
         case WM_ERROR_MSG:
             {
             WCHAR   ach[128];
@@ -285,7 +289,7 @@ LRESULT CALLBACK SessProc(HWND hwnd, UINT uMsg, WPARAM wPar, LPARAM lPar)
                 ach,
                 sizeof(ach)/sizeof(WCHAR));
 
-			MessageBox(hwnd, ach, "Message", MB_OK);
+			MessageBoxW(hwnd, ach, L"Message", MB_OK);
             }
 
             return 0;
@@ -533,36 +537,36 @@ STATIC_FUNC LRESULT SP_WM_CMD(const HWND hwnd, const int nId, const int nNotify,
 					(LPARAM)hSession);
 			break;
 
-		case IDM_TN3270_INDFILE_SEND:
-			emuTn3270IndFileSend(sessQueryEmuHdl(hSession));
+		case IDM_IBM3270_INDFILE_SEND:
+			emuIbm3270IndFileSend(sessQueryEmuHdl(hSession));
 			break;
 
-		case IDM_TN3270_INDFILE_RECEIVE:
-			emuTn3270IndFileReceive(sessQueryEmuHdl(hSession));
+		case IDM_IBM3270_INDFILE_RECEIVE:
+			emuIbm3270IndFileReceive(sessQueryEmuHdl(hSession));
 			break;
 
-		case IDM_TN3270_PRINTER_START:
-			emuTn3270StartPrinter(sessQueryEmuHdl(hSession));
+		case IDM_IBM3270_PRINTER_START:
+			emuIbm3270StartPrinter(sessQueryEmuHdl(hSession));
 			break;
 
-		case IDM_TN3270_PRINTER_STOP:
-			emuTn3270StopPrinter(sessQueryEmuHdl(hSession));
+		case IDM_IBM3270_PRINTER_STOP:
+			emuIbm3270StopPrinter(sessQueryEmuHdl(hSession));
 			break;
 
-		case IDM_TN3270_SETTINGS:
+		case IDM_IBM3270_SETTINGS:
 			DoInternalProperties(hSession, hwnd);
 			break;
 
-		case IDM_TN5250_PRINTER_START:
-			emuTn5250StartPrinter(sessQueryEmuHdl(hSession));
+		case IDM_IBM5250_PRINTER_START:
+			emuIbm5250StartPrinter(sessQueryEmuHdl(hSession));
 			break;
 
-		case IDM_TN5250_PRINTER_STOP:
-			emuTn5250StopPrinter(sessQueryEmuHdl(hSession));
+		case IDM_IBM5250_PRINTER_STOP:
+			emuIbm5250StopPrinter(sessQueryEmuHdl(hSession));
 			break;
 
-		case IDM_TN5250_SETTINGS:
-			emuTn5250ShowSettings(sessQueryEmuHdl(hSession));
+		case IDM_IBM5250_SETTINGS:
+			emuIbm5250ShowSettings(sessQueryEmuHdl(hSession));
 			break;
 
 		case IDM_ACTIONS_CAP:
@@ -797,7 +801,7 @@ STATIC_FUNC LRESULT SP_WM_CMD(const HWND hwnd, const int nId, const int nNotify,
 			{
 			WCHAR ach[256];
 			sessQueryName(hSession, ach, sizeof(ach));
-			MessageBox(hwnd, ach, "Message", MB_OK);
+			MessageBoxW(hwnd, ach, L"Message", MB_OK);
 			}
 			break;
 
@@ -1085,6 +1089,8 @@ void DecodeSessionNotification(const HWND hwndSession,
 	{
 	const HSESSION hSession = (HSESSION)GetWindowLongPtr(hwndSession,
 															GWLP_USERDATA);
+
+	utRexxHapiNotifySessionEvent(hSession, (int)nEvent, lExtra);
 
 	switch (nEvent) /*lint -e787 -e788 */
 		{

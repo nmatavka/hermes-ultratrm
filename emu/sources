@@ -18,8 +18,8 @@ SOURCES=    ansi.c      \
             emuhdl.c    \
             minitel.c   \
             minitelf.c  \
-            tn3270.c    \
-            tn5250.c    \
+            ibm3270.c    \
+            ibm5250.c    \
             videotex.c   \
             viewdata.c  \
             viewdini.c  \

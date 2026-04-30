@@ -312,9 +312,6 @@ int OpenSession(const HSESSION hSession, HWND hwnd)
 
 			if (sessLoadSessionStuff(hSession) == FALSE)
                 iRet = -4;
-
-			emuHomeHostCursor(hhSess->hEmu);
-			emuEraseTerminalScreen(hhSess->hEmu);
 			hhSess->fIsNewSession = FALSE;
 			}		
 

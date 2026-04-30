@@ -637,7 +637,7 @@ nxthdr:
 					return ERROR;
 					}
 				if( ! fBlocking )
-					zmputs(zc, zc->Attn);
+					zmputs(zc, (char *)zc->Attn);
 				continue;
 			case ZSKIP:
 				closeit(zc);
@@ -660,7 +660,7 @@ nxthdr:
 							zmdm_retval(zc, TRUE, ZBADFMT);
 							return ERROR;
 							}
-						zmputs(zc, zc->Attn);  continue;
+						zmputs(zc, (char *)zc->Attn);  continue;
 						}
 					}
 				else
@@ -722,7 +722,7 @@ moredata:
 							zmdm_retval(zc, TRUE, ERROR);
 							return ERROR;
 							}
-						zmputs(zc, zc->Attn);
+						zmputs(zc, (char *)zc->Attn);
 						continue;
 					case TIMEOUT:
 						if ( --n < 0)
@@ -1006,7 +1006,7 @@ int procheader(ZC *zc, BYTE *name)
 	int serial_number;
 	int files_remaining;
 	long bytes_remaining;
-	long our_size;
+	unsigned long our_size;
 	LONG lOptions = 0;
 	XFR_Z_PARAMS *pZ;
 	struct st_rcv_open stRcv;

@@ -217,7 +217,7 @@ int krm_rcv(HSESSION hS, int attended, int single_file)
 			xferMsgPacketnumber(kc->hSession, kc->packetnum);
 
 		/* check for keyboard abort */
-		if (iret = xfer_user_interrupt(kc->hSession))
+		if ((iret = xfer_user_interrupt(kc->hSession)) != 0)
 			{
 			if (iret == XFER_ABORT)
 				{
@@ -711,7 +711,7 @@ int krec_data(ST_KRM *kc)
 			kc->abort_code = KA_OUT_OF_SEQ;
 			return(KREC_ABORT);
 			}
-		if (strcmp(packet, "D") == 0) /* discard file? */
+		if (strcmp((const char *)packet, "D") == 0) /* discard file? */
 			{
 			if (!kc->kr.uabort_code)
 				kc->abort_code = KA_RABORT1;
@@ -974,7 +974,7 @@ void kunload_attributes(ST_KRM *kc, unsigned char *data, KPCKT *rsp_pckt)
 	{
 	unsigned char *limit = data + StrCharGetByteCount(data);
 	unsigned len;
-	unsigned char attrfield[20];
+	char attrfield[20];
 
 	while (data <= limit - 2)
 		{
@@ -984,7 +984,7 @@ void kunload_attributes(ST_KRM *kc, unsigned char *data, KPCKT *rsp_pckt)
 
 		if (len <= sizeof(attrfield) - 1)
 			{
-			strncpy(attrfield, data + 2, len);
+			strncpy(attrfield, (const char *)(data + 2), len);
 			attrfield[len] = '\0';
 			switch (*data)
 				{
@@ -1019,7 +1019,7 @@ void kunload_attributes(ST_KRM *kc, unsigned char *data, KPCKT *rsp_pckt)
 				 */
 
 				/* extract date/time from the packet data field */
-				krm_settime(attrfield, &kc->kr.ul_filetime);
+				krm_settime((unsigned char *)attrfield, &kc->kr.ul_filetime);
 
 				/* if kc->kr.compare_time contains a valid date/time, it means
 				 *	that the /N option was used and the file being received

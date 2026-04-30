@@ -19,6 +19,11 @@
 #include <term/res.h>
 
 #define BTN_CNT 7
+#define TOOLBAR_IMAGE_CNT 8
+#define TOOLBAR_IMAGE_CX 24
+#define TOOLBAR_IMAGE_CY 24
+#define TOOLBAR_BUTTON_CX 26
+#define TOOLBAR_BUTTON_CY 26
 
 struct stToolbarStuff
 	{
@@ -59,38 +64,58 @@ static void AddMinitelButtons(const HWND hwnd);
 HWND CreateSessionToolbar(const HSESSION hSession, const HWND hwndSession)
 	{
 	HWND	 hWnd = 0;
+	HBITMAP  hBitmap = 0;
+	HIMAGELIST hImages = 0;
 	int		 iLoop = 0;
-	DWORD	 lTBStyle = TBSTYLE_TOOLTIPS | WS_CHILD | WS_VISIBLE;
+		/*
+		 * Configure the toolbar style.  Always include TBSTYLE_FLAT to
+		 * provide a modern look (flat buttons) rather than relying on
+		 * EXTENDED_FEATURES.  Tooltips, child and visible flags are
+		 * retained.
+		 */
+		DWORD	 lTBStyle = TBSTYLE_TOOLTIPS | WS_CHILD | WS_VISIBLE | TBSTYLE_FLAT;
 	TBBUTTON lButton;
 
 	//
     // Changed to use Flat style in version 4.0 - mpt 06-10-98
 	//
 
-#if defined( EXTENDED_FEATURES )
-	lTBStyle |= TBSTYLE_FLAT;
-#endif
+		/* EXTENDED_FEATURES previously toggled the flat style, but it is now
+		 * always enabled above.  The conditional has been removed. */
 
 	//
 	// Create a toolbar with no buttons.
 	//
 
-	hWnd = CreateToolbarEx( hwndSession,
-						    lTBStyle,
-						    IDC_TOOLBAR_WIN,
-						    BTN_CNT,
-							glblQueryDllHinst(),
-							IDB_BUTTONS_SMALL,
-							NULL,				 // Array of buttons
-							0,					 // Number of buttons in array
-							16, 16,				 // button size
-							16, 16,	 			 // bitmap size
-							sizeof( TBBUTTON ) );
+	hWnd = CreateWindowExW(0, TOOLBARCLASSNAMEW, NULL, lTBStyle,
+			0, 0, 0, 0, hwndSession, (HMENU)IDC_TOOLBAR_WIN,
+			glblQueryDllHinst(), NULL);
 
 	assert( hWnd );
 
 	if ( IsWindow( hWnd ) )
 		{
+		SendMessage(hWnd, TB_BUTTONSTRUCTSIZE, (WPARAM)sizeof(TBBUTTON), 0);
+		SendMessage(hWnd, TB_SETBITMAPSIZE, 0,
+				MAKELPARAM(TOOLBAR_IMAGE_CX, TOOLBAR_IMAGE_CY));
+		SendMessage(hWnd, TB_SETBUTTONSIZE, 0,
+				MAKELPARAM(TOOLBAR_BUTTON_CX, TOOLBAR_BUTTON_CY));
+
+		hBitmap = (HBITMAP)LoadImageW(glblQueryDllHinst(),
+				MAKEINTRESOURCEW(IDB_BUTTONS_LARGE), IMAGE_BITMAP, 0, 0,
+				LR_CREATEDIBSECTION);
+		if (hBitmap)
+			{
+			hImages = ImageList_Create(TOOLBAR_IMAGE_CX, TOOLBAR_IMAGE_CY,
+					ILC_COLOR8 | ILC_MASK, TOOLBAR_IMAGE_CNT, 0);
+			if (hImages)
+				{
+				ImageList_AddMasked(hImages, hBitmap, RGB(192, 192, 192));
+				SendMessage(hWnd, TB_SETIMAGELIST, 0, (LPARAM)hImages);
+				}
+			DeleteObject(hBitmap);
+			}
+
 		//
 		// Add some buttons.
 		//
@@ -257,4 +282,3 @@ void ToolbarEnableButton(const HWND hwndToolbar, const int uID, BOOL fEnable)
 		SendMessage( hwndToolbar, TB_ENABLEBUTTON, uID, fEnable );
 		}
 	}
-

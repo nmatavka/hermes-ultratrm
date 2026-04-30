@@ -2,9 +2,9 @@ OpenSSH UltraTerminal integration
 =================================
 
 This subtree is the UltraTerminal SSH glue layer. The checked-in
-`openssh-10.3p1` source tree is the selected upstream OpenSSH portable source;
-UltraTerminal must not depend on an external `ssh` executable for its SSH
-transport.
+`openssh-portable-latestw_all` source tree is the primary OpenSSH portable
+source for the Windows PE build; UltraTerminal must not depend on an external
+`ssh` executable for its SSH transport.
 
 The public boundary is `utssh`:
 
@@ -16,6 +16,5 @@ The public boundary is `utssh`:
   bytes through the same UltraTerminal receive pipeline used by Direct TCP.
 
 The old process bridge, executable discovery, and command-line construction
-helpers have been removed. The current implementation is fail-closed until the
-OpenSSH packet, authentication, host-key, and channel state machines are fully
-linked behind this API.
+helpers have been removed. The current implementation links OpenSSH packet,
+authentication, host-key, and channel handling in-process behind this API.

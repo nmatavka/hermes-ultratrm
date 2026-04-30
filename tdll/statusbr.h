@@ -18,7 +18,7 @@
 #define SBR_NTFY_INITIALIZE (WM_USER+0x403) // Calculate part sizes... once
 #define SBR_NTFY_DRAWITEM	(WM_USER+0x404)	// DrawItem
 
-#define SBR_ATOM_NAME		"PROP_SBRDATA"
+#define SBR_ATOM_NAME		L"PROP_SBRDATA"
 
 #define YEAR(t)		(t << 9)
 #define MONTH(t)	(t << 5)

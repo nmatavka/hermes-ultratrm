@@ -26,7 +26,7 @@ int ut3287_run(const char *cmdline)
 
     MessageBoxW(NULL,
         L"UltraTerminal 3287 Printer helper is installed and accepts "
-        L"TN3270E associated-printer launch options. Printing availability "
+        L"IBM 3270 associated-printer launch options. Printing availability "
         L"depends on the host LU and Wine/Windows printer support.",
         L"UltraTerminal 3287 Printer",
         MB_OK | MB_ICONINFORMATION);

@@ -756,36 +756,36 @@ static BOOL DetachDll(const HINSTANCE hInstance)
 		{
 		assert(FALSE);
 		lReturn = FALSE;
-		sprintf(acError, L"UnregisterClass returned error %d",
+		wsprintfW(acError, L"UnregisterClass returned error %d",
 				GetLastError());
-		MessageBox(0, acError, "ERROR", MB_OK);
+		MessageBoxW(0, acError, L"ERROR", MB_OK);
 		}
 
 	if (UnregisterTerminalClass(hInstance) == FALSE)
 		{
 		assert(FALSE);
 		lReturn = FALSE;
-		sprintf(acError, L"UnregisterTerminalClass returned error %d",
+		wsprintfW(acError, L"UnregisterTerminalClass returned error %d",
 				GetLastError());
-		MessageBox(0, acError, "ERROR", MB_OK);
+		MessageBoxW(0, acError, L"ERROR", MB_OK);
 		}
 
 	if (UnregisterVuMeterClass(hInstance) == FALSE)
 		{
 		assert(FALSE);
 		lReturn = FALSE;
-		sprintf(acError, L"UnregisterVuMeterClass returned error %d",
+		wsprintfW(acError, L"UnregisterVuMeterClass returned error %d",
 				GetLastError());
-		MessageBox(0, acError, "ERROR", MB_OK);
+		MessageBoxW(0, acError, L"ERROR", MB_OK);
 		}
 
 	if (UnregisterSidebarClass(hInstance) == FALSE)
 		{
 		assert(FALSE);
 		lReturn = FALSE;
-		sprintf(acError, L"UnregisterSidebarClass returned error %d",
+		wsprintfW(acError, L"UnregisterSidebarClass returned error %d",
 				GetLastError());
-		MessageBox(0, acError, "ERROR", MB_OK);
+		MessageBoxW(0, acError, L"ERROR", MB_OK);
 		}
 
 	#if !defined(NT_EDITION)
@@ -794,9 +794,9 @@ static BOOL DetachDll(const HINSTANCE hInstance)
 		{
 		assert(FALSE);
 		lReturn = FALSE;
-		sprintf(acError, L"UnregisterBannerAboutClass returned error %d",
+		wsprintfW(acError, L"UnregisterBannerAboutClass returned error %d",
 				GetLastError());
-		MessageBox(0, acError, "ERROR", MB_OK);
+		MessageBoxW(0, acError, L"ERROR", MB_OK);
 		}
 	#endif
 	#endif

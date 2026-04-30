@@ -31,6 +31,8 @@ extern int  xfer_carrier_lost(HSESSION hSession);
 
 extern void xfer_purgefile(HSESSION hSession, WCHAR *fname);
 
+struct st_rcv_open;
+
 extern int xfer_open_rcv_file(HSESSION hSession,
 							 struct st_rcv_open *pstRcv,
 							 unsigned long ulOverRide);
@@ -74,4 +76,3 @@ extern int xfer_opensendfile(HSESSION hSession,
 extern void xfer_name_to_send(HSESSION hSession,
 							  WCHAR *local_name,
 							  WCHAR *name_to_send);
-

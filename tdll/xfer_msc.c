@@ -193,7 +193,7 @@ INT InitializeXferHdl(const HSESSION hSession, HXFER hXfer)
  */
 INT LoadXferHdl(HXFER hXfer)
 	{
-	long lSize;
+	unsigned long lSize;
 	XD_TYPE *pX;
 	SZ_TYPE *pZ;
 
@@ -730,8 +730,8 @@ int xfrSendListSend(HXFER hXfer)
 	HSESSION hSession;
 	int nRet = 0;
 	int nIdx;
-	long lSize;
-	long lTmp;
+	unsigned long ulSize;
+	unsigned long ulTmp;
 	LPWSTR pszName;
 	XD_TYPE *pX;
 	XFR_SEND *pSend;
@@ -773,13 +773,13 @@ int xfrSendListSend(HXFER hXfer)
 			nRet = XFR_NO_MEMORY;
 			goto SLSexit;
 			}
-		for (lSize = 0, nIdx = 0; nIdx < pSend->nCount; nIdx += 1)
+		for (ulSize = 0, nIdx = 0; nIdx < pSend->nCount; nIdx += 1)
 			{
 			pszName = pX->acSendNames[nIdx];
-			lTmp = 0;
-			GetFileSizeFromName(pszName, &lTmp);
-			pSend->pList[nIdx].lSize = lTmp;
-			lSize += lTmp;
+			ulTmp = 0;
+			GetFileSizeFromName(pszName, &ulTmp);
+			pSend->pList[nIdx].lSize = (long)ulTmp;
+			ulSize += ulTmp;
 			pSend->pList[nIdx].pszName = pszName;
 			pX->acSendNames[nIdx] = NULL;
 			}
@@ -790,7 +790,7 @@ int xfrSendListSend(HXFER hXfer)
 
 		pX->nDirection = XFER_SEND;
 
-		pSend->lSize = lSize;
+		pSend->lSize = (long)ulSize;
 
 		xfrInitDspStruct(hXfer);
 

@@ -99,7 +99,7 @@ void AboutDlg(HWND hwndSession)
 //
 #if !defined(NT_EDITION)
 #if defined(INCL_PRIVATE_EDITION_BANNER)
-#define BANNER_ABOUT_CLASS "Banner About Class"
+#define BANNER_ABOUT_CLASS L"Banner About Class"
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
  * FUNCTION:
@@ -212,6 +212,7 @@ LRESULT CALLBACK BannerAboutProc(HWND hwnd, UINT uMsg, WPARAM wPar, LPARAM lPar)
    	LOGFONT 	lf;
    	HFONT		hFont;
     WCHAR       atchSerialNumber[MAX_PATH * 2];
+    WCHAR       achBuildDate[32];
     DWORD       dwSize = sizeof(atchSerialNumber);
 //#endif
 
@@ -229,7 +230,7 @@ LRESULT CALLBACK BannerAboutProc(HWND hwnd, UINT uMsg, WPARAM wPar, LPARAM lPar)
 
 		SetWindowLongPtr(hwnd, 0, (LONG_PTR)hBitmap);
 
-    	GetObject(hBitmap, sizeof(BITMAP), (LPWSTR)&bm);
+		GetObject(hBitmap, sizeof(BITMAP), &bm);
 
     	SetRect(&rc, 0, 0, bm.bmWidth, bm.bmHeight);
     	AdjustWindowRect(&rc, WS_CHILD | WS_VISIBLE, FALSE);
@@ -284,7 +285,8 @@ LRESULT CALLBACK BannerAboutProc(HWND hwnd, UINT uMsg, WPARAM wPar, LPARAM lPar)
 			lf.lfHeight = 14;
 			lf.lfCharSet = ANSI_CHARSET;
 			//lf.lfWeight = FW_SEMIBOLD;
-			strcpy(lf.lfFaceName, "Arial");
+			lstrcpynW(lf.lfFaceName, L"Arial",
+					sizeof(lf.lfFaceName) / sizeof(lf.lfFaceName[0]));
 
 			hFont = CreateFontIndirect(&lf);
 
@@ -293,10 +295,13 @@ LRESULT CALLBACK BannerAboutProc(HWND hwnd, UINT uMsg, WPARAM wPar, LPARAM lPar)
 				hFont = SelectObject(hDC, hFont);
 				//SetBkColor(hDC, RGB(0,255,0));
 				SetBkMode( hDC, TRANSPARENT );
-				TextOut(hDC, 19, 230, "Build Date", 10);
-				TextOut(hDC, 19, 242, __DATE__, strlen(__DATE__));
-				TextOut(hDC, 225, 230, "Copyright 2001", 15);
-				TextOut(hDC, 225, 242, "Hilgraeve Inc.", 14);
+				MultiByteToWideChar(CP_ACP, 0, __DATE__, -1,
+						achBuildDate,
+						sizeof(achBuildDate) / sizeof(achBuildDate[0]));
+				TextOutW(hDC, 19, 230, L"Build Date", 10);
+				TextOutW(hDC, 19, 242, achBuildDate, lstrlenW(achBuildDate));
+				TextOutW(hDC, 225, 230, L"Copyright 2001", 14);
+				TextOutW(hDC, 225, 242, L"Hilgraeve Inc.", 14);
 				DeleteObject(SelectObject(hDC, hFont));
 				}
 
@@ -311,7 +316,8 @@ LRESULT CALLBACK BannerAboutProc(HWND hwnd, UINT uMsg, WPARAM wPar, LPARAM lPar)
 
     			hFont = SelectObject(hDC, hFont);
     			SetBkColor(hDC, GetSysColor(COLOR_BTNFACE));
-    			TextOut(hDC, 15, 12, atchSerialNumber, strlen(atchSerialNumber));
+				TextOutW(hDC, 15, 12, atchSerialNumber,
+						lstrlenW(atchSerialNumber));
     			DeleteObject(SelectObject(hDC, hFont));
     			}
 	   		}
@@ -351,4 +357,3 @@ BOOL UnregisterBannerAboutClass(HANDLE hInstance)
 
 #endif //INCL_PRIVATE_EDITION_BANNER
 #endif //!NT_EDITION
-

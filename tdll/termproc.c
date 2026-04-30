@@ -63,6 +63,7 @@ static void TP_WM_EMU_SETTINGS(const HHTERM hhTerm);
 static int TP_WM_TERM_LOAD_SETTINGS(const HHTERM hhTerm);
 static int TP_WM_TERM_SAVE_SETTINGS(const HHTERM hhTerm);
 static void TP_WM_TERM_FORCE_WMSIZE(const HHTERM hhTerm);
+static BOOL termUsesImmediateIbmPath(const HHTERM hhTerm);
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
  * FUNCTION:
@@ -949,11 +950,33 @@ static void TP_WM_TERM_KEY(const HWND hwnd, KEY_T Key)
 
 	if ( kabExpandMacroKey(hhTerm->hSession, Key) == 0)
         {
-		CLoopSend(sessQueryCLoopHdl(hhTerm->hSession), &Key, 1, CLOOP_KEYS);
+		if (termUsesImmediateIbmPath(hhTerm))
+			{
+			emuKbdIn(sessQueryEmuHdl(hhTerm->hSession), Key, FALSE);
+
+			/*
+			 * IBM 3270/5250 edit locally inside the emulator before an AID is
+			 * sent, so pull the update immediately instead of waiting for the
+			 * posted session notification path that stream emulators use.
+			 */
+			SendMessage(hwnd, WM_TERM_GETUPDATE, 0, 0);
+			}
+		else
+			{
+			CLoopSend(sessQueryCLoopHdl(hhTerm->hSession), &Key, 1, CLOOP_KEYS);
+			}
         }
 
 	LinkCursors(hhTerm);
 	return;
+	}
+
+static BOOL termUsesImmediateIbmPath(const HHTERM hhTerm)
+	{
+	const HEMU hEmu = sessQueryEmuHdl(hhTerm->hSession);
+	const int nEmuId = emuQueryEmulatorId(hEmu);
+
+	return (nEmuId == EMU_IBM3270 || nEmuId == EMU_IBM5250) ? TRUE : FALSE;
 	}
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -1082,6 +1105,14 @@ static void TP_WM_EMU_SETTINGS(const HHTERM hhTerm)
 	emuQuerySettings(hEmu, &stEmuUserSettings);
 	hhTerm->fBlink = stEmuUserSettings.fCursorBlink;
 
+#ifdef INCL_TERMINAL_SIZE_AND_COLORS
+	if (hhTerm->iColorTheme != stEmuUserSettings.nColorTheme)
+		{
+		termApplyColorTheme(hhTerm, stEmuUserSettings.nColorTheme);
+		fChange = TRUE;
+		}
+#endif
+
 	/* --- Check cursor type --- */
 
 	if (iCurType != hhTerm->iCurType)
@@ -1126,7 +1157,7 @@ static void TP_WM_EMU_SETTINGS(const HHTERM hhTerm)
  */
 static int TP_WM_TERM_LOAD_SETTINGS(const HHTERM hhTerm)
 	{
-	LONG lSize;
+	unsigned long lSize;
 
 	if (hhTerm == 0)
 		{

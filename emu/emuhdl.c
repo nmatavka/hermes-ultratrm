@@ -755,8 +755,7 @@ int emuInitializeHdl(const HEMU hEmu)
 
 	hhEmu->iCurAttrState = CS_STATE;
 
-	std_setcolors(hhEmu, GetNearestColorIndex(GetSysColor(COLOR_WINDOWTEXT)),
-							GetNearestColorIndex(GetSysColor(COLOR_WINDOW)));
+    std_setcolors(hhEmu, VC_BRT_CYAN, VC_BRT_WHITE);
 
 	// Initialize the user setting default values.
 	//
@@ -849,261 +848,261 @@ int emuInitializeHdl(const HEMU hEmu)
 
     StrCharCopy(hhEmu->stUserSettings.acTelnetId, stBaseSFSettings.acTelnetId);
 
-#if defined(INCL_TN3270)
-	hhEmu->stUserSettings.nTn3270Model = 2;
-	hhEmu->stUserSettings.fTn3270Tls = FALSE;
-	hhEmu->stUserSettings.fTn3270Printer = FALSE;
-	hhEmu->stUserSettings.nTn3270TlsMode = EMU_TN3270_TLS_OFF;
-	hhEmu->stUserSettings.fTn3270VerifyCert = TRUE;
-	hhEmu->stUserSettings.acTn3270LuName[0] = L'\0';
-	hhEmu->stUserSettings.acTn3270DeviceName[0] = L'\0';
-	StrCharCopy(hhEmu->stUserSettings.acTn3270HostCodePage, L"cp037");
-	hhEmu->stUserSettings.acTn3270CaPath[0] = L'\0';
-	hhEmu->stUserSettings.acTn3270CertPath[0] = L'\0';
-	hhEmu->stUserSettings.acTn3270KeyPath[0] = L'\0';
-	hhEmu->stUserSettings.acTn3270IndFileDir[0] = L'\0';
-	hhEmu->stUserSettings.acTn3270IndFileOptions[0] = L'\0';
-	hhEmu->stUserSettings.acTn3270PrinterLu[0] = L'\0';
-	hhEmu->stUserSettings.acTn3270PrinterOptions[0] = L'\0';
+#if defined(INCL_IBM3270)
+	hhEmu->stUserSettings.nIbm3270Model = 2;
+	hhEmu->stUserSettings.fIbm3270Tls = FALSE;
+	hhEmu->stUserSettings.fIbm3270Printer = FALSE;
+	hhEmu->stUserSettings.nIbm3270TlsMode = EMU_IBM3270_TLS_OFF;
+	hhEmu->stUserSettings.fIbm3270VerifyCert = TRUE;
+	hhEmu->stUserSettings.acIbm3270LuName[0] = L'\0';
+	hhEmu->stUserSettings.acIbm3270DeviceName[0] = L'\0';
+	StrCharCopy(hhEmu->stUserSettings.acIbm3270HostCodePage, L"cp037");
+	hhEmu->stUserSettings.acIbm3270CaPath[0] = L'\0';
+	hhEmu->stUserSettings.acIbm3270CertPath[0] = L'\0';
+	hhEmu->stUserSettings.acIbm3270KeyPath[0] = L'\0';
+	hhEmu->stUserSettings.acIbm3270IndFileDir[0] = L'\0';
+	hhEmu->stUserSettings.acIbm3270IndFileOptions[0] = L'\0';
+	hhEmu->stUserSettings.acIbm3270PrinterLu[0] = L'\0';
+	hhEmu->stUserSettings.acIbm3270PrinterOptions[0] = L'\0';
 
 	if ((nRet = emuLoadSettings(hhEmu,
-						SFID_EMU_TN3270_MODEL,
-						sizeof(hhEmu->stUserSettings.nTn3270Model),
-						&hhEmu->stUserSettings.nTn3270Model)) == -1)
+						SFID_EMU_IBM3270_MODEL,
+						sizeof(hhEmu->stUserSettings.nIbm3270Model),
+						&hhEmu->stUserSettings.nIbm3270Model)) == -1)
 		{
 		nReturn = -1;
 		goto InitExit;
 		}
 	if ((nRet = emuLoadSettings(hhEmu,
-						SFID_EMU_TN3270_LU,
-						sizeof(hhEmu->stUserSettings.acTn3270LuName),
-						hhEmu->stUserSettings.acTn3270LuName)) == -1)
+						SFID_EMU_IBM3270_LU,
+						sizeof(hhEmu->stUserSettings.acIbm3270LuName),
+						hhEmu->stUserSettings.acIbm3270LuName)) == -1)
 		{
 		nReturn = -1;
 		goto InitExit;
 		}
 	if ((nRet = emuLoadSettings(hhEmu,
-						SFID_EMU_TN3270_TLS,
-						sizeof(hhEmu->stUserSettings.fTn3270Tls),
-						&hhEmu->stUserSettings.fTn3270Tls)) == -1)
+						SFID_EMU_IBM3270_TLS,
+						sizeof(hhEmu->stUserSettings.fIbm3270Tls),
+						&hhEmu->stUserSettings.fIbm3270Tls)) == -1)
 		{
 		nReturn = -1;
 		goto InitExit;
 		}
 	if ((nRet = emuLoadSettings(hhEmu,
-						SFID_EMU_TN3270_CA,
-						sizeof(hhEmu->stUserSettings.acTn3270CaPath),
-						hhEmu->stUserSettings.acTn3270CaPath)) == -1)
+						SFID_EMU_IBM3270_CA,
+						sizeof(hhEmu->stUserSettings.acIbm3270CaPath),
+						hhEmu->stUserSettings.acIbm3270CaPath)) == -1)
 		{
 		nReturn = -1;
 		goto InitExit;
 		}
 	if ((nRet = emuLoadSettings(hhEmu,
-						SFID_EMU_TN3270_CERT,
-						sizeof(hhEmu->stUserSettings.acTn3270CertPath),
-						hhEmu->stUserSettings.acTn3270CertPath)) == -1)
+						SFID_EMU_IBM3270_CERT,
+						sizeof(hhEmu->stUserSettings.acIbm3270CertPath),
+						hhEmu->stUserSettings.acIbm3270CertPath)) == -1)
 		{
 		nReturn = -1;
 		goto InitExit;
 		}
 	if ((nRet = emuLoadSettings(hhEmu,
-						SFID_EMU_TN3270_KEY,
-						sizeof(hhEmu->stUserSettings.acTn3270KeyPath),
-						hhEmu->stUserSettings.acTn3270KeyPath)) == -1)
+						SFID_EMU_IBM3270_KEY,
+						sizeof(hhEmu->stUserSettings.acIbm3270KeyPath),
+						hhEmu->stUserSettings.acIbm3270KeyPath)) == -1)
 		{
 		nReturn = -1;
 		goto InitExit;
 		}
 	if ((nRet = emuLoadSettings(hhEmu,
-						SFID_EMU_TN3270_INDFILE,
-						sizeof(hhEmu->stUserSettings.acTn3270IndFileDir),
-						hhEmu->stUserSettings.acTn3270IndFileDir)) == -1)
+						SFID_EMU_IBM3270_INDFILE,
+						sizeof(hhEmu->stUserSettings.acIbm3270IndFileDir),
+						hhEmu->stUserSettings.acIbm3270IndFileDir)) == -1)
 		{
 		nReturn = -1;
 		goto InitExit;
 		}
 	if ((nRet = emuLoadSettings(hhEmu,
-						SFID_EMU_TN3270_PRINTER,
-						sizeof(hhEmu->stUserSettings.fTn3270Printer),
-						&hhEmu->stUserSettings.fTn3270Printer)) == -1)
+						SFID_EMU_IBM3270_PRINTER,
+						sizeof(hhEmu->stUserSettings.fIbm3270Printer),
+						&hhEmu->stUserSettings.fIbm3270Printer)) == -1)
 		{
 		nReturn = -1;
 		goto InitExit;
 		}
 	if ((nRet = emuLoadSettings(hhEmu,
-						SFID_EMU_TN3270_TLS_MODE,
-						sizeof(hhEmu->stUserSettings.nTn3270TlsMode),
-						&hhEmu->stUserSettings.nTn3270TlsMode)) == -1)
+						SFID_EMU_IBM3270_TLS_MODE,
+						sizeof(hhEmu->stUserSettings.nIbm3270TlsMode),
+						&hhEmu->stUserSettings.nIbm3270TlsMode)) == -1)
 		{
 		nReturn = -1;
 		goto InitExit;
 		}
 	if ((nRet = emuLoadSettings(hhEmu,
-						SFID_EMU_TN3270_VERIFY_CERT,
-						sizeof(hhEmu->stUserSettings.fTn3270VerifyCert),
-						&hhEmu->stUserSettings.fTn3270VerifyCert)) == -1)
+						SFID_EMU_IBM3270_VERIFY_CERT,
+						sizeof(hhEmu->stUserSettings.fIbm3270VerifyCert),
+						&hhEmu->stUserSettings.fIbm3270VerifyCert)) == -1)
 		{
 		nReturn = -1;
 		goto InitExit;
 		}
 	if ((nRet = emuLoadSettings(hhEmu,
-						SFID_EMU_TN3270_DEVICE,
-						sizeof(hhEmu->stUserSettings.acTn3270DeviceName),
-						hhEmu->stUserSettings.acTn3270DeviceName)) == -1)
+						SFID_EMU_IBM3270_DEVICE,
+						sizeof(hhEmu->stUserSettings.acIbm3270DeviceName),
+						hhEmu->stUserSettings.acIbm3270DeviceName)) == -1)
 		{
 		nReturn = -1;
 		goto InitExit;
 		}
 	if ((nRet = emuLoadSettings(hhEmu,
-						SFID_EMU_TN3270_CODEPAGE,
-						sizeof(hhEmu->stUserSettings.acTn3270HostCodePage),
-						hhEmu->stUserSettings.acTn3270HostCodePage)) == -1)
+						SFID_EMU_IBM3270_CODEPAGE,
+						sizeof(hhEmu->stUserSettings.acIbm3270HostCodePage),
+						hhEmu->stUserSettings.acIbm3270HostCodePage)) == -1)
 		{
 		nReturn = -1;
 		goto InitExit;
 		}
 	if ((nRet = emuLoadSettings(hhEmu,
-						SFID_EMU_TN3270_INDFILE_OPTS,
-						sizeof(hhEmu->stUserSettings.acTn3270IndFileOptions),
-						hhEmu->stUserSettings.acTn3270IndFileOptions)) == -1)
+						SFID_EMU_IBM3270_INDFILE_OPTS,
+						sizeof(hhEmu->stUserSettings.acIbm3270IndFileOptions),
+						hhEmu->stUserSettings.acIbm3270IndFileOptions)) == -1)
 		{
 		nReturn = -1;
 		goto InitExit;
 		}
 	if ((nRet = emuLoadSettings(hhEmu,
-						SFID_EMU_TN3270_PRINTER_LU,
-						sizeof(hhEmu->stUserSettings.acTn3270PrinterLu),
-						hhEmu->stUserSettings.acTn3270PrinterLu)) == -1)
+						SFID_EMU_IBM3270_PRINTER_LU,
+						sizeof(hhEmu->stUserSettings.acIbm3270PrinterLu),
+						hhEmu->stUserSettings.acIbm3270PrinterLu)) == -1)
 		{
 		nReturn = -1;
 		goto InitExit;
 		}
 	if ((nRet = emuLoadSettings(hhEmu,
-						SFID_EMU_TN3270_PRINTER_OPTS,
-						sizeof(hhEmu->stUserSettings.acTn3270PrinterOptions),
-						hhEmu->stUserSettings.acTn3270PrinterOptions)) == -1)
+						SFID_EMU_IBM3270_PRINTER_OPTS,
+						sizeof(hhEmu->stUserSettings.acIbm3270PrinterOptions),
+						hhEmu->stUserSettings.acIbm3270PrinterOptions)) == -1)
 		{
 		nReturn = -1;
 		goto InitExit;
 		}
-	if (hhEmu->stUserSettings.fTn3270Tls &&
-			hhEmu->stUserSettings.nTn3270TlsMode == EMU_TN3270_TLS_OFF)
-		hhEmu->stUserSettings.nTn3270TlsMode = EMU_TN3270_TLS_DIRECT;
+	if (hhEmu->stUserSettings.fIbm3270Tls &&
+			hhEmu->stUserSettings.nIbm3270TlsMode == EMU_IBM3270_TLS_OFF)
+		hhEmu->stUserSettings.nIbm3270TlsMode = EMU_IBM3270_TLS_DIRECT;
 #endif
 
-#if defined(INCL_TN5250)
-	hhEmu->stUserSettings.fTn5250Tls = FALSE;
-	hhEmu->stUserSettings.fTn5250Printer = FALSE;
-	hhEmu->stUserSettings.nTn5250TlsMode = EMU_TN5250_TLS_OFF;
-	hhEmu->stUserSettings.fTn5250VerifyCert = TRUE;
-	StrCharCopy(hhEmu->stUserSettings.acTn5250TermType, L"IBM-3179-2");
-	hhEmu->stUserSettings.acTn5250DeviceName[0] = L'\0';
-	StrCharCopy(hhEmu->stUserSettings.acTn5250HostCodePage, L"37");
-	hhEmu->stUserSettings.acTn5250CaPath[0] = L'\0';
-	hhEmu->stUserSettings.acTn5250CertPath[0] = L'\0';
-	hhEmu->stUserSettings.acTn5250KeyPath[0] = L'\0';
-	hhEmu->stUserSettings.acTn5250PrinterDevice[0] = L'\0';
-	hhEmu->stUserSettings.acTn5250PrinterOptions[0] = L'\0';
+#if defined(INCL_IBM5250)
+	hhEmu->stUserSettings.fIbm5250Tls = FALSE;
+	hhEmu->stUserSettings.fIbm5250Printer = FALSE;
+	hhEmu->stUserSettings.nIbm5250TlsMode = EMU_IBM5250_TLS_OFF;
+	hhEmu->stUserSettings.fIbm5250VerifyCert = TRUE;
+	StrCharCopy(hhEmu->stUserSettings.acIbm5250TermType, L"IBM-3179-2");
+	hhEmu->stUserSettings.acIbm5250DeviceName[0] = L'\0';
+	StrCharCopy(hhEmu->stUserSettings.acIbm5250HostCodePage, L"37");
+	hhEmu->stUserSettings.acIbm5250CaPath[0] = L'\0';
+	hhEmu->stUserSettings.acIbm5250CertPath[0] = L'\0';
+	hhEmu->stUserSettings.acIbm5250KeyPath[0] = L'\0';
+	hhEmu->stUserSettings.acIbm5250PrinterDevice[0] = L'\0';
+	hhEmu->stUserSettings.acIbm5250PrinterOptions[0] = L'\0';
 
 	if ((nRet = emuLoadSettings(hhEmu,
-						SFID_EMU_TN5250_TERM,
-						sizeof(hhEmu->stUserSettings.acTn5250TermType),
-						hhEmu->stUserSettings.acTn5250TermType)) == -1)
+						SFID_EMU_IBM5250_TERM,
+						sizeof(hhEmu->stUserSettings.acIbm5250TermType),
+						hhEmu->stUserSettings.acIbm5250TermType)) == -1)
 		{
 		nReturn = -1;
 		goto InitExit;
 		}
 	if ((nRet = emuLoadSettings(hhEmu,
-						SFID_EMU_TN5250_DEVICE,
-						sizeof(hhEmu->stUserSettings.acTn5250DeviceName),
-						hhEmu->stUserSettings.acTn5250DeviceName)) == -1)
+						SFID_EMU_IBM5250_DEVICE,
+						sizeof(hhEmu->stUserSettings.acIbm5250DeviceName),
+						hhEmu->stUserSettings.acIbm5250DeviceName)) == -1)
 		{
 		nReturn = -1;
 		goto InitExit;
 		}
 	if ((nRet = emuLoadSettings(hhEmu,
-						SFID_EMU_TN5250_CODEPAGE,
-						sizeof(hhEmu->stUserSettings.acTn5250HostCodePage),
-						hhEmu->stUserSettings.acTn5250HostCodePage)) == -1)
+						SFID_EMU_IBM5250_CODEPAGE,
+						sizeof(hhEmu->stUserSettings.acIbm5250HostCodePage),
+						hhEmu->stUserSettings.acIbm5250HostCodePage)) == -1)
 		{
 		nReturn = -1;
 		goto InitExit;
 		}
 	if ((nRet = emuLoadSettings(hhEmu,
-						SFID_EMU_TN5250_TLS,
-						sizeof(hhEmu->stUserSettings.fTn5250Tls),
-						&hhEmu->stUserSettings.fTn5250Tls)) == -1)
+						SFID_EMU_IBM5250_TLS,
+						sizeof(hhEmu->stUserSettings.fIbm5250Tls),
+						&hhEmu->stUserSettings.fIbm5250Tls)) == -1)
 		{
 		nReturn = -1;
 		goto InitExit;
 		}
 	if ((nRet = emuLoadSettings(hhEmu,
-						SFID_EMU_TN5250_TLS_MODE,
-						sizeof(hhEmu->stUserSettings.nTn5250TlsMode),
-						&hhEmu->stUserSettings.nTn5250TlsMode)) == -1)
+						SFID_EMU_IBM5250_TLS_MODE,
+						sizeof(hhEmu->stUserSettings.nIbm5250TlsMode),
+						&hhEmu->stUserSettings.nIbm5250TlsMode)) == -1)
 		{
 		nReturn = -1;
 		goto InitExit;
 		}
 	if ((nRet = emuLoadSettings(hhEmu,
-						SFID_EMU_TN5250_VERIFY_CERT,
-						sizeof(hhEmu->stUserSettings.fTn5250VerifyCert),
-						&hhEmu->stUserSettings.fTn5250VerifyCert)) == -1)
+						SFID_EMU_IBM5250_VERIFY_CERT,
+						sizeof(hhEmu->stUserSettings.fIbm5250VerifyCert),
+						&hhEmu->stUserSettings.fIbm5250VerifyCert)) == -1)
 		{
 		nReturn = -1;
 		goto InitExit;
 		}
 	if ((nRet = emuLoadSettings(hhEmu,
-						SFID_EMU_TN5250_CA,
-						sizeof(hhEmu->stUserSettings.acTn5250CaPath),
-						hhEmu->stUserSettings.acTn5250CaPath)) == -1)
+						SFID_EMU_IBM5250_CA,
+						sizeof(hhEmu->stUserSettings.acIbm5250CaPath),
+						hhEmu->stUserSettings.acIbm5250CaPath)) == -1)
 		{
 		nReturn = -1;
 		goto InitExit;
 		}
 	if ((nRet = emuLoadSettings(hhEmu,
-						SFID_EMU_TN5250_CERT,
-						sizeof(hhEmu->stUserSettings.acTn5250CertPath),
-						hhEmu->stUserSettings.acTn5250CertPath)) == -1)
+						SFID_EMU_IBM5250_CERT,
+						sizeof(hhEmu->stUserSettings.acIbm5250CertPath),
+						hhEmu->stUserSettings.acIbm5250CertPath)) == -1)
 		{
 		nReturn = -1;
 		goto InitExit;
 		}
 	if ((nRet = emuLoadSettings(hhEmu,
-						SFID_EMU_TN5250_KEY,
-						sizeof(hhEmu->stUserSettings.acTn5250KeyPath),
-						hhEmu->stUserSettings.acTn5250KeyPath)) == -1)
+						SFID_EMU_IBM5250_KEY,
+						sizeof(hhEmu->stUserSettings.acIbm5250KeyPath),
+						hhEmu->stUserSettings.acIbm5250KeyPath)) == -1)
 		{
 		nReturn = -1;
 		goto InitExit;
 		}
 	if ((nRet = emuLoadSettings(hhEmu,
-						SFID_EMU_TN5250_PRINTER,
-						sizeof(hhEmu->stUserSettings.fTn5250Printer),
-						&hhEmu->stUserSettings.fTn5250Printer)) == -1)
+						SFID_EMU_IBM5250_PRINTER,
+						sizeof(hhEmu->stUserSettings.fIbm5250Printer),
+						&hhEmu->stUserSettings.fIbm5250Printer)) == -1)
 		{
 		nReturn = -1;
 		goto InitExit;
 		}
 	if ((nRet = emuLoadSettings(hhEmu,
-						SFID_EMU_TN5250_PRINTER_DEV,
-						sizeof(hhEmu->stUserSettings.acTn5250PrinterDevice),
-						hhEmu->stUserSettings.acTn5250PrinterDevice)) == -1)
+						SFID_EMU_IBM5250_PRINTER_DEV,
+						sizeof(hhEmu->stUserSettings.acIbm5250PrinterDevice),
+						hhEmu->stUserSettings.acIbm5250PrinterDevice)) == -1)
 		{
 		nReturn = -1;
 		goto InitExit;
 		}
 	if ((nRet = emuLoadSettings(hhEmu,
-						SFID_EMU_TN5250_PRINTER_OPTS,
-						sizeof(hhEmu->stUserSettings.acTn5250PrinterOptions),
-						hhEmu->stUserSettings.acTn5250PrinterOptions)) == -1)
+						SFID_EMU_IBM5250_PRINTER_OPTS,
+						sizeof(hhEmu->stUserSettings.acIbm5250PrinterOptions),
+						hhEmu->stUserSettings.acIbm5250PrinterOptions)) == -1)
 		{
 		nReturn = -1;
 		goto InitExit;
 		}
-	if (hhEmu->stUserSettings.fTn5250Tls &&
-			hhEmu->stUserSettings.nTn5250TlsMode == EMU_TN5250_TLS_OFF)
-		hhEmu->stUserSettings.nTn5250TlsMode = EMU_TN5250_TLS_DIRECT;
+	if (hhEmu->stUserSettings.fIbm5250Tls &&
+			hhEmu->stUserSettings.nIbm5250TlsMode == EMU_IBM5250_TLS_OFF)
+		hhEmu->stUserSettings.nIbm5250TlsMode = EMU_IBM5250_TLS_DIRECT;
 #endif
 
 #if defined(INCL_VIDEOTEX)
@@ -1158,10 +1157,9 @@ int emuInitializeHdl(const HEMU hEmu)
 #ifdef INCL_TERMINAL_SIZE_AND_COLORS
 	// Set up the default colors in case the user settings don't exist.
 	#if TRUE  
-	hhEmu->stUserSettings.nTextColor = 
-			GetNearestColorIndex(GetSysColor(COLOR_WINDOWTEXT));
-	hhEmu->stUserSettings.nBackgroundColor =
-			GetNearestColorIndex(GetSysColor(COLOR_WINDOW));
+	hhEmu->stUserSettings.nColorTheme = EMU_COLOR_THEME_SOLARIZED_LIGHT;
+	hhEmu->stUserSettings.nTextColor = VC_BRT_CYAN;
+	hhEmu->stUserSettings.nBackgroundColor = VC_BRT_WHITE;
 	#else
 	// We've decided not to do this. rde 14 Jul 98
 	// Use white (non-bold) on black. rde 8 Jul 98
@@ -1186,6 +1184,19 @@ int emuInitializeHdl(const HEMU hEmu)
 				hhEmu->stUserSettings.nTextColor,
 				hhEmu->stUserSettings.nBackgroundColor);
 		}
+
+	if ((nRet = emuLoadSettings(hhEmu,
+						SFID_EMU_COLOR_THEME,
+						sizeof(hhEmu->stUserSettings.nColorTheme),
+						&hhEmu->stUserSettings.nColorTheme)) == -1)
+		{
+		nReturn = -1;
+		goto InitExit;
+		}
+
+	if (hhEmu->stUserSettings.nColorTheme < 0 ||
+			hhEmu->stUserSettings.nColorTheme >= EMU_COLOR_THEME_COUNT)
+		hhEmu->stUserSettings.nColorTheme = EMU_COLOR_THEME_SOLARIZED_LIGHT;
 
 	if ((nRet = emuLoadSettings(hhEmu, 
 						SFID_EMU_BKGRNDCOLOR_SETTING,
@@ -1356,6 +1367,11 @@ int emuSaveHdl(const HEMU hEmu)
 						&hhEmu->stUserSettings.nBackgroundColor);
 
 	sfPutSessionItem(sessQuerySysFileHdl(hhEmu->hSession),
+						SFID_EMU_COLOR_THEME,
+						sizeof(hhEmu->stUserSettings.nColorTheme),
+						&hhEmu->stUserSettings.nColorTheme);
+
+	sfPutSessionItem(sessQuerySysFileHdl(hhEmu->hSession),
 						SFID_EMU_SCRNROWS_SETTING,
 						sizeof(hhEmu->stUserSettings.nUserDefRows),
 						&hhEmu->stUserSettings.nUserDefRows);
@@ -1373,118 +1389,118 @@ int emuSaveHdl(const HEMU hEmu)
 						&hhEmu->stUserSettings.fPrintRaw);
 #endif // INCL_PRINT_PASSTHROUGH
 
-#if defined(INCL_TN3270)
+#if defined(INCL_IBM3270)
 	sfPutSessionItem(sessQuerySysFileHdl(hhEmu->hSession),
-						SFID_EMU_TN3270_MODEL,
-						sizeof(hhEmu->stUserSettings.nTn3270Model),
-						&hhEmu->stUserSettings.nTn3270Model);
+						SFID_EMU_IBM3270_MODEL,
+						sizeof(hhEmu->stUserSettings.nIbm3270Model),
+						&hhEmu->stUserSettings.nIbm3270Model);
 	sfPutSessionItem(sessQuerySysFileHdl(hhEmu->hSession),
-						SFID_EMU_TN3270_LU,
-						sizeof(hhEmu->stUserSettings.acTn3270LuName),
-						hhEmu->stUserSettings.acTn3270LuName);
+						SFID_EMU_IBM3270_LU,
+						sizeof(hhEmu->stUserSettings.acIbm3270LuName),
+						hhEmu->stUserSettings.acIbm3270LuName);
 	sfPutSessionItem(sessQuerySysFileHdl(hhEmu->hSession),
-						SFID_EMU_TN3270_TLS,
-						sizeof(hhEmu->stUserSettings.fTn3270Tls),
-						&hhEmu->stUserSettings.fTn3270Tls);
+						SFID_EMU_IBM3270_TLS,
+						sizeof(hhEmu->stUserSettings.fIbm3270Tls),
+						&hhEmu->stUserSettings.fIbm3270Tls);
 	sfPutSessionItem(sessQuerySysFileHdl(hhEmu->hSession),
-						SFID_EMU_TN3270_CA,
-						sizeof(hhEmu->stUserSettings.acTn3270CaPath),
-						hhEmu->stUserSettings.acTn3270CaPath);
+						SFID_EMU_IBM3270_CA,
+						sizeof(hhEmu->stUserSettings.acIbm3270CaPath),
+						hhEmu->stUserSettings.acIbm3270CaPath);
 	sfPutSessionItem(sessQuerySysFileHdl(hhEmu->hSession),
-						SFID_EMU_TN3270_CERT,
-						sizeof(hhEmu->stUserSettings.acTn3270CertPath),
-						hhEmu->stUserSettings.acTn3270CertPath);
+						SFID_EMU_IBM3270_CERT,
+						sizeof(hhEmu->stUserSettings.acIbm3270CertPath),
+						hhEmu->stUserSettings.acIbm3270CertPath);
 	sfPutSessionItem(sessQuerySysFileHdl(hhEmu->hSession),
-						SFID_EMU_TN3270_KEY,
-						sizeof(hhEmu->stUserSettings.acTn3270KeyPath),
-						hhEmu->stUserSettings.acTn3270KeyPath);
+						SFID_EMU_IBM3270_KEY,
+						sizeof(hhEmu->stUserSettings.acIbm3270KeyPath),
+						hhEmu->stUserSettings.acIbm3270KeyPath);
 	sfPutSessionItem(sessQuerySysFileHdl(hhEmu->hSession),
-						SFID_EMU_TN3270_INDFILE,
-						sizeof(hhEmu->stUserSettings.acTn3270IndFileDir),
-						hhEmu->stUserSettings.acTn3270IndFileDir);
+						SFID_EMU_IBM3270_INDFILE,
+						sizeof(hhEmu->stUserSettings.acIbm3270IndFileDir),
+						hhEmu->stUserSettings.acIbm3270IndFileDir);
 	sfPutSessionItem(sessQuerySysFileHdl(hhEmu->hSession),
-						SFID_EMU_TN3270_PRINTER,
-						sizeof(hhEmu->stUserSettings.fTn3270Printer),
-						&hhEmu->stUserSettings.fTn3270Printer);
+						SFID_EMU_IBM3270_PRINTER,
+						sizeof(hhEmu->stUserSettings.fIbm3270Printer),
+						&hhEmu->stUserSettings.fIbm3270Printer);
 	sfPutSessionItem(sessQuerySysFileHdl(hhEmu->hSession),
-						SFID_EMU_TN3270_TLS_MODE,
-						sizeof(hhEmu->stUserSettings.nTn3270TlsMode),
-						&hhEmu->stUserSettings.nTn3270TlsMode);
+						SFID_EMU_IBM3270_TLS_MODE,
+						sizeof(hhEmu->stUserSettings.nIbm3270TlsMode),
+						&hhEmu->stUserSettings.nIbm3270TlsMode);
 	sfPutSessionItem(sessQuerySysFileHdl(hhEmu->hSession),
-						SFID_EMU_TN3270_VERIFY_CERT,
-						sizeof(hhEmu->stUserSettings.fTn3270VerifyCert),
-						&hhEmu->stUserSettings.fTn3270VerifyCert);
+						SFID_EMU_IBM3270_VERIFY_CERT,
+						sizeof(hhEmu->stUserSettings.fIbm3270VerifyCert),
+						&hhEmu->stUserSettings.fIbm3270VerifyCert);
 	sfPutSessionItem(sessQuerySysFileHdl(hhEmu->hSession),
-						SFID_EMU_TN3270_DEVICE,
-						sizeof(hhEmu->stUserSettings.acTn3270DeviceName),
-						hhEmu->stUserSettings.acTn3270DeviceName);
+						SFID_EMU_IBM3270_DEVICE,
+						sizeof(hhEmu->stUserSettings.acIbm3270DeviceName),
+						hhEmu->stUserSettings.acIbm3270DeviceName);
 	sfPutSessionItem(sessQuerySysFileHdl(hhEmu->hSession),
-						SFID_EMU_TN3270_CODEPAGE,
-						sizeof(hhEmu->stUserSettings.acTn3270HostCodePage),
-						hhEmu->stUserSettings.acTn3270HostCodePage);
+						SFID_EMU_IBM3270_CODEPAGE,
+						sizeof(hhEmu->stUserSettings.acIbm3270HostCodePage),
+						hhEmu->stUserSettings.acIbm3270HostCodePage);
 	sfPutSessionItem(sessQuerySysFileHdl(hhEmu->hSession),
-						SFID_EMU_TN3270_INDFILE_OPTS,
-						sizeof(hhEmu->stUserSettings.acTn3270IndFileOptions),
-						hhEmu->stUserSettings.acTn3270IndFileOptions);
+						SFID_EMU_IBM3270_INDFILE_OPTS,
+						sizeof(hhEmu->stUserSettings.acIbm3270IndFileOptions),
+						hhEmu->stUserSettings.acIbm3270IndFileOptions);
 	sfPutSessionItem(sessQuerySysFileHdl(hhEmu->hSession),
-						SFID_EMU_TN3270_PRINTER_LU,
-						sizeof(hhEmu->stUserSettings.acTn3270PrinterLu),
-						hhEmu->stUserSettings.acTn3270PrinterLu);
+						SFID_EMU_IBM3270_PRINTER_LU,
+						sizeof(hhEmu->stUserSettings.acIbm3270PrinterLu),
+						hhEmu->stUserSettings.acIbm3270PrinterLu);
 	sfPutSessionItem(sessQuerySysFileHdl(hhEmu->hSession),
-						SFID_EMU_TN3270_PRINTER_OPTS,
-						sizeof(hhEmu->stUserSettings.acTn3270PrinterOptions),
-						hhEmu->stUserSettings.acTn3270PrinterOptions);
+						SFID_EMU_IBM3270_PRINTER_OPTS,
+						sizeof(hhEmu->stUserSettings.acIbm3270PrinterOptions),
+						hhEmu->stUserSettings.acIbm3270PrinterOptions);
 #endif
 
-#if defined(INCL_TN5250)
+#if defined(INCL_IBM5250)
 	sfPutSessionItem(sessQuerySysFileHdl(hhEmu->hSession),
-						SFID_EMU_TN5250_TERM,
-						sizeof(hhEmu->stUserSettings.acTn5250TermType),
-						hhEmu->stUserSettings.acTn5250TermType);
+						SFID_EMU_IBM5250_TERM,
+						sizeof(hhEmu->stUserSettings.acIbm5250TermType),
+						hhEmu->stUserSettings.acIbm5250TermType);
 	sfPutSessionItem(sessQuerySysFileHdl(hhEmu->hSession),
-						SFID_EMU_TN5250_DEVICE,
-						sizeof(hhEmu->stUserSettings.acTn5250DeviceName),
-						hhEmu->stUserSettings.acTn5250DeviceName);
+						SFID_EMU_IBM5250_DEVICE,
+						sizeof(hhEmu->stUserSettings.acIbm5250DeviceName),
+						hhEmu->stUserSettings.acIbm5250DeviceName);
 	sfPutSessionItem(sessQuerySysFileHdl(hhEmu->hSession),
-						SFID_EMU_TN5250_CODEPAGE,
-						sizeof(hhEmu->stUserSettings.acTn5250HostCodePage),
-						hhEmu->stUserSettings.acTn5250HostCodePage);
+						SFID_EMU_IBM5250_CODEPAGE,
+						sizeof(hhEmu->stUserSettings.acIbm5250HostCodePage),
+						hhEmu->stUserSettings.acIbm5250HostCodePage);
 	sfPutSessionItem(sessQuerySysFileHdl(hhEmu->hSession),
-						SFID_EMU_TN5250_TLS,
-						sizeof(hhEmu->stUserSettings.fTn5250Tls),
-						&hhEmu->stUserSettings.fTn5250Tls);
+						SFID_EMU_IBM5250_TLS,
+						sizeof(hhEmu->stUserSettings.fIbm5250Tls),
+						&hhEmu->stUserSettings.fIbm5250Tls);
 	sfPutSessionItem(sessQuerySysFileHdl(hhEmu->hSession),
-						SFID_EMU_TN5250_TLS_MODE,
-						sizeof(hhEmu->stUserSettings.nTn5250TlsMode),
-						&hhEmu->stUserSettings.nTn5250TlsMode);
+						SFID_EMU_IBM5250_TLS_MODE,
+						sizeof(hhEmu->stUserSettings.nIbm5250TlsMode),
+						&hhEmu->stUserSettings.nIbm5250TlsMode);
 	sfPutSessionItem(sessQuerySysFileHdl(hhEmu->hSession),
-						SFID_EMU_TN5250_VERIFY_CERT,
-						sizeof(hhEmu->stUserSettings.fTn5250VerifyCert),
-						&hhEmu->stUserSettings.fTn5250VerifyCert);
+						SFID_EMU_IBM5250_VERIFY_CERT,
+						sizeof(hhEmu->stUserSettings.fIbm5250VerifyCert),
+						&hhEmu->stUserSettings.fIbm5250VerifyCert);
 	sfPutSessionItem(sessQuerySysFileHdl(hhEmu->hSession),
-						SFID_EMU_TN5250_CA,
-						sizeof(hhEmu->stUserSettings.acTn5250CaPath),
-						hhEmu->stUserSettings.acTn5250CaPath);
+						SFID_EMU_IBM5250_CA,
+						sizeof(hhEmu->stUserSettings.acIbm5250CaPath),
+						hhEmu->stUserSettings.acIbm5250CaPath);
 	sfPutSessionItem(sessQuerySysFileHdl(hhEmu->hSession),
-						SFID_EMU_TN5250_CERT,
-						sizeof(hhEmu->stUserSettings.acTn5250CertPath),
-						hhEmu->stUserSettings.acTn5250CertPath);
+						SFID_EMU_IBM5250_CERT,
+						sizeof(hhEmu->stUserSettings.acIbm5250CertPath),
+						hhEmu->stUserSettings.acIbm5250CertPath);
 	sfPutSessionItem(sessQuerySysFileHdl(hhEmu->hSession),
-						SFID_EMU_TN5250_KEY,
-						sizeof(hhEmu->stUserSettings.acTn5250KeyPath),
-						hhEmu->stUserSettings.acTn5250KeyPath);
+						SFID_EMU_IBM5250_KEY,
+						sizeof(hhEmu->stUserSettings.acIbm5250KeyPath),
+						hhEmu->stUserSettings.acIbm5250KeyPath);
 	sfPutSessionItem(sessQuerySysFileHdl(hhEmu->hSession),
-						SFID_EMU_TN5250_PRINTER,
-						sizeof(hhEmu->stUserSettings.fTn5250Printer),
-						&hhEmu->stUserSettings.fTn5250Printer);
+						SFID_EMU_IBM5250_PRINTER,
+						sizeof(hhEmu->stUserSettings.fIbm5250Printer),
+						&hhEmu->stUserSettings.fIbm5250Printer);
 	sfPutSessionItem(sessQuerySysFileHdl(hhEmu->hSession),
-						SFID_EMU_TN5250_PRINTER_DEV,
-						sizeof(hhEmu->stUserSettings.acTn5250PrinterDevice),
-						hhEmu->stUserSettings.acTn5250PrinterDevice);
+						SFID_EMU_IBM5250_PRINTER_DEV,
+						sizeof(hhEmu->stUserSettings.acIbm5250PrinterDevice),
+						hhEmu->stUserSettings.acIbm5250PrinterDevice);
 	sfPutSessionItem(sessQuerySysFileHdl(hhEmu->hSession),
-						SFID_EMU_TN5250_PRINTER_OPTS,
-						sizeof(hhEmu->stUserSettings.acTn5250PrinterOptions),
-						hhEmu->stUserSettings.acTn5250PrinterOptions);
+						SFID_EMU_IBM5250_PRINTER_OPTS,
+						sizeof(hhEmu->stUserSettings.acIbm5250PrinterOptions),
+						hhEmu->stUserSettings.acIbm5250PrinterOptions);
 #endif
 
 #if defined(INCL_VIDEOTEX)
@@ -1747,6 +1763,42 @@ int emuQueryCurPos(const HEMU hEmu, int *row, int *col)
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
  * FUNCTION:
+ *  emuSetCurPos
+ *
+ * DESCRIPTION:
+ *  Moves the host cursor to a specific row and column on the active
+ *  emulator screen and notifies the terminal to repaint the cursor.
+ *
+ * RETURNS:
+ *  0 on success, otherwise -1 for a bad handle or -2 for bad coordinates.
+ */
+int emuSetCurPos(const HEMU hEmu, int row, int col)
+    {
+    const HHEMU hhEmu = (HHEMU)hEmu;
+
+    if (hEmu == 0)
+        {
+        assert(0);
+        return -1;
+        }
+
+    emuLock(hEmu);
+
+    if (row < 0 || col < 0 || row > hhEmu->emu_maxrow || col > hhEmu->emu_maxcol)
+        {
+        emuUnlock(hEmu);
+        return -2;
+        }
+
+    (*hhEmu->emu_setcurpos)(hhEmu, row, col);
+    emuUnlock(hEmu);
+
+    NotifyClient(hhEmu->hSession, EVENT_TERM_UPDATE, 0);
+    return 0;
+    }
+
+/*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+ * FUNCTION:
  *	emuQueryCursorType
  *
  * DESCRIPTION:
@@ -1870,6 +1922,62 @@ int emuQueryRowsCols(const HEMU hEmu, int *piRows, int *piCols)
 	emuUnlock(hEmu);
 	return 0;
 	}
+
+/*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+ * FUNCTION:
+ *  emuCopyTextRange
+ *
+ * DESCRIPTION:
+ *  Copies plain terminal text from a single emulator row into a caller
+ *  buffer. Blank cells are returned as spaces.
+ *
+ * RETURNS:
+ *  Number of copied characters, or a negative error code.
+ */
+int emuCopyTextRange(const HEMU hEmu,
+                     int iRow,
+                     int iCol,
+                     int cchCount,
+                     WCHAR *pszBuffer,
+                     int cchBuffer)
+    {
+    const HHEMU hhEmu = (HHEMU)hEmu;
+    int iCopied = 0;
+    int iLimitCol;
+    int iImgRow;
+
+    if (hEmu == 0 || pszBuffer == 0 || cchBuffer <= 0)
+        {
+        assert(hEmu != 0);
+        return -1;
+        }
+
+    if (iRow < 0 || iCol < 0 || cchCount < 0)
+        return -2;
+
+    emuLock(hEmu);
+
+    if (iRow > hhEmu->emu_maxrow || iCol > hhEmu->emu_maxcol)
+        {
+        emuUnlock(hEmu);
+        pszBuffer[0] = L'\0';
+        return -2;
+        }
+
+    iImgRow = row_index(hhEmu, iRow);
+    iLimitCol = min(hhEmu->emu_maxcol, iCol + cchCount - 1);
+
+    while (iCol <= iLimitCol && iCopied < (cchBuffer - 1))
+        {
+        const ECHAR eCh = hhEmu->emu_apText[iImgRow][iCol];
+        pszBuffer[iCopied++] = (eCh == ECHAR_CAST('\0')) ? L' ' : (WCHAR)eCh;
+        ++iCol;
+        }
+
+    emuUnlock(hEmu);
+    pszBuffer[iCopied] = L'\0';
+    return iCopied;
+    }
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
  * FUNCTION:
@@ -2073,15 +2181,15 @@ int emuQueryName(const HEMU hEmu, WCHAR *achBuffer, int nSize)
 			break;
 #endif
 
-#if defined(INCL_TN3270)
-		case EMU_TN3270:
-			nResourceId = IDS_EMUNAME_TN3270;
+#if defined(INCL_IBM3270)
+		case EMU_IBM3270:
+			nResourceId = IDS_EMUNAME_IBM3270;
 			break;
 #endif
 
-#if defined(INCL_TN5250)
-		case EMU_TN5250:
-			nResourceId = IDS_EMUNAME_TN5250;
+#if defined(INCL_IBM5250)
+		case EMU_IBM5250:
+			nResourceId = IDS_EMUNAME_IBM5250;
 			break;
 #endif
 
@@ -2313,15 +2421,15 @@ int emuLoad(const HEMU hEmu, const int nEmuId)
 			break;
 		#endif
 
-		#if defined(INCL_TN3270)
-		case EMU_TN3270:
-			emuInitFunction = tn3270_init;
+		#if defined(INCL_IBM3270)
+		case EMU_IBM3270:
+			emuInitFunction = ibm3270_init;
 			break;
 		#endif
 
-		#if defined(INCL_TN5250)
-		case EMU_TN5250:
-			emuInitFunction = tn5250_init;
+		#if defined(INCL_IBM5250)
+		case EMU_IBM5250:
+			emuInitFunction = ibm5250_init;
 			break;
 		#endif
 
@@ -2540,8 +2648,8 @@ int emuSetSettings(const HEMU hEmu, const PSTEMUSET pstSettings)
 		case EMU_VT320:
 		case EMU_VT100PLUS:
 		case EMU_VTUTF8:
-		case EMU_TN3270:
-		case EMU_TN5250:
+		case EMU_IBM3270:
+		case EMU_IBM5250:
 		case EMU_VIDEOTEX:
 			break;
 		default:
@@ -2551,27 +2659,27 @@ int emuSetSettings(const HEMU hEmu, const PSTEMUSET pstSettings)
 			break;
 		}
 
-#if defined(INCL_TN3270)
-	if (pstSettings->nTn3270Model < 2 || pstSettings->nTn3270Model > 5)
+#if defined(INCL_IBM3270)
+	if (pstSettings->nIbm3270Model < 2 || pstSettings->nIbm3270Model > 5)
 		{
-		pstSettings->nTn3270Model = 2;
+		pstSettings->nIbm3270Model = 2;
 		iReturn = -1;
 		}
-	if (pstSettings->nTn3270TlsMode < EMU_TN3270_TLS_OFF ||
-			pstSettings->nTn3270TlsMode > EMU_TN3270_TLS_STARTTLS)
+	if (pstSettings->nIbm3270TlsMode < EMU_IBM3270_TLS_OFF ||
+			pstSettings->nIbm3270TlsMode > EMU_IBM3270_TLS_STARTTLS)
 		{
-		pstSettings->nTn3270TlsMode = pstSettings->fTn3270Tls ?
-				EMU_TN3270_TLS_DIRECT : EMU_TN3270_TLS_OFF;
+		pstSettings->nIbm3270TlsMode = pstSettings->fIbm3270Tls ?
+				EMU_IBM3270_TLS_DIRECT : EMU_IBM3270_TLS_OFF;
 		iReturn = -1;
 		}
 #endif
 
-#if defined(INCL_TN5250)
-	if (pstSettings->nTn5250TlsMode < EMU_TN5250_TLS_OFF ||
-			pstSettings->nTn5250TlsMode > EMU_TN5250_TLS_DIRECT)
+#if defined(INCL_IBM5250)
+	if (pstSettings->nIbm5250TlsMode < EMU_IBM5250_TLS_OFF ||
+			pstSettings->nIbm5250TlsMode > EMU_IBM5250_TLS_DIRECT)
 		{
-		pstSettings->nTn5250TlsMode = pstSettings->fTn5250Tls ?
-				EMU_TN5250_TLS_DIRECT : EMU_TN5250_TLS_OFF;
+		pstSettings->nIbm5250TlsMode = pstSettings->fIbm5250Tls ?
+				EMU_IBM5250_TLS_DIRECT : EMU_IBM5250_TLS_OFF;
 		iReturn = -1;
 		}
 #endif
@@ -2640,13 +2748,20 @@ int emuSetSettings(const HEMU hEmu, const PSTEMUSET pstSettings)
 	emuLock(hEmu);
 
 #ifdef INCL_TERMINAL_SIZE_AND_COLORS
-	if (pstSettings->nTextColor != hhEmu->stUserSettings.nTextColor ||
+	if (pstSettings->nColorTheme < 0 ||
+			pstSettings->nColorTheme >= EMU_COLOR_THEME_COUNT)
+		pstSettings->nColorTheme = EMU_COLOR_THEME_SOLARIZED_LIGHT;
+
+	if (pstSettings->nColorTheme != hhEmu->stUserSettings.nColorTheme ||
+			pstSettings->nTextColor != hhEmu->stUserSettings.nTextColor ||
 			pstSettings->nBackgroundColor != hhEmu->stUserSettings.nBackgroundColor)
 		{
 		// The user defined colors have changed--implement them.
 		std_setcolors(hhEmu, 
 				pstSettings->nTextColor,
 				pstSettings->nBackgroundColor);
+		NotifyClient(hhEmu->hSession, EVENT_EMU_SETTINGS, 0);
+		NotifyClient(hhEmu->hSession, EVENT_EMU_CLRATTR, 0);
 		}
 #endif
 
@@ -3141,14 +3256,14 @@ int emuQueryDefaultTelnetId(const int nEmuId, WCHAR *achTelnetId, int nSize)
         break;
 #endif
 
-#if defined(INCL_TN3270)
-    case EMU_TN3270:
+#if defined(INCL_IBM3270)
+    case EMU_IBM3270:
         pszDefaultId = L"IBM-3278-2-E";
         break;
 #endif
 
-#if defined(INCL_TN5250)
-    case EMU_TN5250:
+#if defined(INCL_IBM5250)
+    case EMU_IBM5250:
         pszDefaultId = L"IBM-3179-2";
         break;
 #endif
@@ -3176,6 +3291,33 @@ int emuQueryDefaultTelnetId(const int nEmuId, WCHAR *achTelnetId, int nSize)
         }
 
     return iRet;
+    }
+
+const WCHAR *emuQueryIbmProtocolName(const int nEmuId, const int nTransport)
+    {
+    switch (nEmuId)
+        {
+#if defined(INCL_IBM3270)
+    case EMU_IBM3270:
+        if (nTransport == CNCT_TRANSPORT_SSH_TUNNEL)
+            return L"ssh3270";
+        if (nTransport == CNCT_TRANSPORT_DIRECT_TCP)
+            return L"tn3270";
+        return L"IBM 3270";
+#endif
+
+#if defined(INCL_IBM5250)
+    case EMU_IBM5250:
+        if (nTransport == CNCT_TRANSPORT_SSH_TUNNEL)
+            return L"ssh5250";
+        if (nTransport == CNCT_TRANSPORT_DIRECT_TCP)
+            return L"tn5250";
+        return L"IBM 5250";
+#endif
+
+    default:
+        return NULL;
+        }
     }
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-

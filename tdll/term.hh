@@ -119,6 +119,7 @@ struct stTerm
 
 	int 		iCurType;			// Type of cursor defined in emu\emu.h
 	int 		iHstCurSiz; 		// Vertical size of host cursor
+	int			iColorTheme;		// EMU_COLOR_THEME_* palette selection
 
 	HTIMER		hCursorTimer,		// timer for blinking terminal cursor
 				hMarkingTimer;		// used for scroll marking
@@ -154,6 +155,7 @@ void DestroyTerminalHdl(const HHTERM hhTerm);
 BOOL termSysColorChng(const HHTERM hhTerm);
 
 void termSetClrAttr(const HHTERM hhTerm);
+void termApplyColorTheme(const HHTERM hhTerm, int nTheme);
 BOOL termSetFont(const HHTERM hhTerm, const PLOGFONT plf);
 
 HFONT termMakeFont(const HHTERM hhTerm, const BOOL fUnderline,

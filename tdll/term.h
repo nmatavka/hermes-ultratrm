@@ -72,6 +72,10 @@
 /* --- Color table lives in terminal files --- */
 
 int GetNearestColorIndex(COLORREF cr);
+const WCHAR *termColorThemeName(int nTheme);
+int termColorThemeDefaultText(int nTheme);
+int termColorThemeDefaultBackground(int nTheme);
+COLORREF termColorThemeColor(int nTheme, int nColor);
 void RefreshTermWindow(const HWND hwndTerm);
 
 int termSetLogFont(const HWND hwndTerm, LPLOGFONT plf);

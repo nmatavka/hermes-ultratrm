@@ -25,3 +25,14 @@ EXPORTS
 	; sf.c
 	sfGetSessionItem
 	sfPutSessionItem
+
+    ; Rexx compatibility loaders
+    ;
+    ; The full Rxha*/RxZoc* surface is emitted from tdll/rexxapis.c via
+    ; __declspec(dllexport) so it can be generated from the shared function
+    ; tables without hand-maintaining hundreds of lines here. The stable loader
+    ; entry points remain listed explicitly in the module definition file.
+    haLoadFuncs
+    haDropFuncs
+    utLoadRexxApis
+    utDropRexxApis

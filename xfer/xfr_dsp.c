@@ -110,7 +110,7 @@ void xferMsgProgress(HSESSION hSession,
  */
 void xferMsgNewfile(HSESSION hSession,
 						   int filen,
-						   BYTE *theirname,
+						   const void *theirname,
 						   WCHAR *ourname)
 	{
 	XD_TYPE *pX;
@@ -126,7 +126,11 @@ void xferMsgNewfile(HSESSION hSession,
 
 		if (theirname != NULL)
 			{
-			StrCharCopy(pX->acTheirName, theirname);
+			MultiByteToWideChar(CP_ACP, 0, (const char *)theirname, -1,
+					pX->acTheirName,
+					sizeof(pX->acTheirName) / sizeof(pX->acTheirName[0]));
+			pX->acTheirName[sizeof(pX->acTheirName) /
+					sizeof(pX->acTheirName[0]) - 1] = L'\0';
 			pX->bTheirName = 1;
 			}
 

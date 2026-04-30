@@ -456,7 +456,7 @@ static int telnet_stream_get_next(Tn5250Stream* This, unsigned char* buf,
         return -1; /* No data on socket. */
     }
 
-    rc = recv(This->sockfd, buf, size, 0);
+    rc = recv(This->sockfd, (char *)buf, size, 0);
     if (WAS_ERROR_RET(rc)) {
         if (LAST_ERROR != ERR_AGAIN && LAST_ERROR != ERR_INTR) {
             TN5250_LOG(
@@ -479,7 +479,7 @@ static int telnet_stream_get_next(Tn5250Stream* This, unsigned char* buf,
 static int sendWill(SOCKET_TYPE sock, unsigned char what) {
     UCHAR buff[3] = { IAC, WILL };
     buff[2] = what;
-    return send(sock, buff, 3, 0);
+    return send(sock, (const char *)buff, 3, 0);
 }
 
 /****i* lib5250/telnet_stream_do_verb

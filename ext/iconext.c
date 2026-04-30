@@ -139,7 +139,7 @@ typedef struct _CSampleIconExt	// smx
 	IExtractIcon	_ctm;			// 1st base class
 	IPersistFile	_sxi;			// 2nd base class
 	int 			_cRef;			// reference count
-    char	    _szFile[MAX_PATH];	//
+	WCHAR			_szFile[MAX_PATH];	//
 	} CSampleIconExt, * PSAMPLEICONEXT;
 
 #define SMX_OFFSETOF(x)	        ((UINT_PTR)(&((PSAMPLEICONEXT)0)->x))
@@ -229,30 +229,8 @@ STDMETHODIMP IconExt_IsDirty(LPPERSISTFILE pPersistFile)
 STDMETHODIMP IconExt_Load(LPPERSISTFILE pPersistFile, LPCOLESTR lpszFileName, DWORD grfMode)
 	{
 	PSAMPLEICONEXT this = PSXI2PSMX(pPersistFile);
-	int iRet = 0;
-
-#if 1
-	iRet = WideCharToMultiByte(
-			CP_ACP, 			// CodePage
-			0,					// dwFlags
-			lpszFileName,		// lpWideCharStr
-			-1, 				// cchWideChar
-			this->_szFile,		// lpMultiByteStr
-			sizeof(this->_szFile),	// cchMultiByte,
-			NULL,				// lpDefaultChar,
-			NULL				// lpUsedDefaultChar
-			);
-#endif
-//
-// WideCharToMultiByte does not work on build 84.
-//
-#if 1
-    if (iRet==0)
-    {
-	LPSTR psz=this->_szFile;
-	while(*psz++ = (char)*lpszFileName++);
-    }
-#endif
+	lstrcpynW(this->_szFile, lpszFileName ? lpszFileName : L"",
+		sizeof(this->_szFile) / sizeof(this->_szFile[0]));
     return NOERROR;
 	}
 
@@ -279,7 +257,7 @@ STDMETHODIMP IconExt_GetCurFile(LPPERSISTFILE pPersistFile, LPOLESTR FAR* lplpsz
 
 STDMETHODIMP IconExt_GetIconLocation(LPEXTRACTICON pexic,
 		     UINT   uFlags,
-		     LPSTR  szIconFile,
+		     LPWSTR szIconFile,
 		     UINT   cchMax,
 		     int  FAR * piIndex,
 		     UINT FAR * pwFlags)
@@ -295,9 +273,9 @@ STDMETHODIMP IconExt_GetIconLocation(LPEXTRACTICON pexic,
 		int nIndex = 0;
 		int nRet = 0;
 
-		GetModuleFileName(hInstanceDll, szIconFile, cchMax);
+		GetModuleFileNameW(hInstanceDll, szIconFile, cchMax);
 
-		hFile = CreateFile(this->_szFile, GENERIC_READ, FILE_SHARE_READ,
+		hFile = CreateFileW(this->_szFile, GENERIC_READ, FILE_SHARE_READ,
 			0, OPEN_EXISTING, 0, 0);
 
 		if ( hFile != INVALID_HANDLE_VALUE ) //mpt:4-29-98 we weren't checking for failure here
@@ -332,7 +310,7 @@ STDMETHODIMP IconExt_GetIconLocation(LPEXTRACTICON pexic,
 	}
 
 STDMETHODIMP IconExt_Extract(LPEXTRACTICON pexic,
-			   LPCSTR pszFile,
+			   LPCWSTR pszFile,
 		       UINT	  nIconIndex,
 		       HICON  FAR *phiconLarge,
 		       HICON  FAR *phiconSmall,

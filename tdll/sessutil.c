@@ -385,7 +385,7 @@ void  sessInitializeIcons(HSESSION hSession)
 void  sessLoadIcons(HSESSION hSession)
 	{
 	const HHSESSION hhSess = VerifySessionHandle(hSession);
-	long lSize;
+	unsigned long lSize;
 
 	lSize = sizeof(hhSess->nIconId);
 

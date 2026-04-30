@@ -56,6 +56,10 @@ typedef struct stCnctDriverPublic *HDRIVER;
 #define CNCT_TRANSPORT_SSH_INTERACTIVE  1
 #define CNCT_TRANSPORT_SSH_TUNNEL       2
 
+#define CNCT_TCP_TLS_OFF                0
+#define CNCT_TCP_TLS_STARTTLS           1
+#define CNCT_TCP_TLS_IMPLICIT           2
+
 /* --- Function Prototypes --- */
 
 HCNCT cnctCreateHdl(const HSESSION hSession);

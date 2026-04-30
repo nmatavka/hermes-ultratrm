@@ -68,6 +68,8 @@ DWORD  WINAPI WsckComWriteThread(void *pvData);
 #define NVT_SB_TT_S     8
 #define NVT_SB_TT_S_I   9
 #define NVT_SB_TN3270E  10
+#define NVT_SB_STARTTLS 11
+#define NVT_SB_STARTTLS_I 12
 
 #define ECHO_MODE   0
 #define SGA_MODE    1
@@ -76,6 +78,7 @@ DWORD  WINAPI WsckComWriteThread(void *pvData);
 #define NAWS_MODE   4
 #define EOR_MODE    5
 #define TN3270E_MODE 6
+#define STARTTLS_MODE 7
 // If any new modes are added, be sure to update MODE_MAX in comstd.
 
 #define NVT_DISCARD 1
@@ -141,7 +144,21 @@ DWORD  WINAPI WsckComWriteThread(void *pvData);
 #define TELOPT_TOGGLEFLOW 33    /* toggle flow control */
 #define TELOPT_XDISPLOC 35  /* X display location */
 #define TELOPT_EXOPL    255 /* extended-options-list */
-#define TELOPT_TN3270E  40  /* TN3270 enhanced */
+#define TELOPT_TN3270E  40  /* IBM 3270 enhanced Telnet */
+
+/*
+ * START_TLS (option 46) is defined by the Telnet START-TLS draft.  It allows
+ * the client and server to negotiate upgrading a plain Telnet connection to
+ * TLS on the standard Telnet port (23).  The UltraTerminal winsock driver
+ * supports this option when enabled via the driver "TLS" device special.
+ */
+#define TELOPT_STARTTLS 46  /* Telnet StartTLS option */
+
+/* Sub-command qualifier for START_TLS.  The FOLLOWS sub-command indicates
+ * that the next octets on the wire are TLS handshake data.  See
+ * draft-altman-telnet-starttls-02 section 3.1 for details【281731810361514†L301-L334】.
+ */
+#define TLS_STARTTLS_FOLLOWS 1
 
 /* sub-option qualifiers */
 #define TELQUAL_IS      0   /* option is... */
@@ -157,11 +174,13 @@ DWORD  WINAPI WsckComWriteThread(void *pvData);
 VOID WinSockCreateNVT(ST_STDCOM * pstWS);
 VOID WinSockReleaseNVT(ST_STDCOM * pstWS);
 int FAR PASCAL WinSockNetworkVirtualTerminal(ECHAR mc, void *pD);
-int WinSockIsTN3270(ST_STDCOM * pstWS);
-VOID WinSockMaybeStartTN3270(ST_STDCOM * pstWS);
+int WsckStartTls(ST_STDCOM *pstPrivate);
+int WinSockIsIbm3270(ST_STDCOM * pstWS);
+VOID WinSockMaybeStartIbm3270Telnet(ST_STDCOM * pstWS);
+VOID WinSockRequestStartTls(ST_STDCOM * pstWS);
 
 VOID WinSockSendMessage(ST_STDCOM * pstWS, INT nMsg, INT nChar);
-VOID WinSockSendBuffer(ST_STDCOM * pstWS, INT nSize, LPSTR pszBuffer);
+VOID WinSockSendBuffer(ST_STDCOM * pstWS, INT nSize, const void *pvBuffer);
 
 VOID WinSockGotDO  (ST_STDCOM * pstWS, const PSTOPT pstO);
 VOID WinSockGotWILL(ST_STDCOM * pstWS, const PSTOPT pstO);

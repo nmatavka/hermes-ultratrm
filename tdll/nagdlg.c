@@ -31,6 +31,8 @@
 
 #include <io.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <wchar.h>
 //#include <time.h>
 
 // Control IDs for the dialog:
@@ -210,7 +212,7 @@ time_t CalcExpirationDate(void)
     DWORD dwSize = sizeof(atchSerialNumber);
     struct tm stSerial;
     time_t tSerial;
-    WCHAR tday[2], tmonth[2], tyear[2];
+    WCHAR tday[3], tmonth[3], tyear[3];
 
     //get installation date from registry
     regQueryValue(HKEY_CURRENT_USER,
@@ -223,20 +225,20 @@ time_t CalcExpirationDate(void)
     memset(&stSerial, 0, sizeof(struct tm));
 
     //set month
-    strncpy(tmonth, &atchSerialNumber[0], 2);
+    wcsncpy(tmonth, &atchSerialNumber[0], 2);
     tmonth[2] = L'\0';
 
     //set day
-    strncpy(tday, &atchSerialNumber[3], 2);
+    wcsncpy(tday, &atchSerialNumber[3], 2);
     tday[2] = L'\0';
 
     //set year
-    strncpy(tyear, &atchSerialNumber[6], 2);
+    wcsncpy(tyear, &atchSerialNumber[6], 2);
     tyear[2] = L'\0';
 
-    stSerial.tm_mday = atoi(tday);
-    stSerial.tm_mon = atoi(tmonth) - 1; // tm counts from 0
-    stSerial.tm_year = atoi(tyear); 
+    stSerial.tm_mday = (int)wcstol(tday, NULL, 10);
+    stSerial.tm_mon = (int)wcstol(tmonth, NULL, 10) - 1; // tm counts from 0
+    stSerial.tm_year = (int)wcstol(tyear, NULL, 10);
 
 #if 0
     // Expiration date is 1st day of fourth calendar month from date
@@ -292,15 +294,15 @@ time_t CalcExpirationDate(void)
     //strip off executable
 	if (result != 0)
 		{
-		pszPtr = strrchr(acExePath, L'\\');
+		pszPtr = wcsrchr(acExePath, L'\\');
 		*pszPtr = L'\0';
 		}
 		
 	//build path to htorder.exe
 	acHTMFile[0] = L'\0';
-	strcat(acHTMFile, acExePath);
-	strcat(acHTMFile, L"\\");
-	strcat(acHTMFile, L"Purchase Private Edition.exe");
+	lstrcatW(acHTMFile, acExePath);
+	lstrcatW(acHTMFile, L"\\");
+	lstrcatW(acHTMFile, L"Purchase Private Edition.exe");
 
 	//check if file exists
 

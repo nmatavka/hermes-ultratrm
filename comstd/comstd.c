@@ -728,7 +728,7 @@ int WINAPI DeviceSpecial(ST_STDCOM *pstPrivate,
     // Implement only the Break function.  All other comm functions handled
     // through TAPI. - mrw:6/15/95
     //
-    if (_stricmp(pszInstructions, "Send Break") == 0)
+    if (lstrcmpiW(pszInstructions, L"Send Break") == 0)
         {
         if (pstPrivate->hWinComm != INVALID_HANDLE_VALUE && !pstPrivate->fBreakSignalOn)
             {
@@ -2098,9 +2098,9 @@ static int Nibble[] = {0,1,1,0,1,0,0,1,1,0,0,1,0,1,1,0}; // 1=odd, 0=even
  * RETURNS:
  *
  */
-void AutoDetectAnalyze(ST_STDCOM *pstPrivate, int nBytes, char *pchBufr)
+void AutoDetectAnalyze(ST_STDCOM *pstPrivate, int nBytes, BYTE *pchBufr)
     {
-    char *pchScan = pchBufr;
+    BYTE *pchScan = pchBufr;
     char *pszMsg;
     int fForceTo7Bits = FALSE;
     int iCnt = nBytes;

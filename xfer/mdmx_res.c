@@ -117,7 +117,7 @@ int load_pckt(ST_MDMX *pX,
 		*cp = 0;
 		*(cp + 1) = 0;
 
-		crc = calc_crc(pX, (unsigned)0, p->bdata,
+		crc = calc_crc(pX, (unsigned)0, (LPSTR)p->bdata,
 				(kpckt ? LARGE_PACKET : SMALL_PACKET) + 2 );
 
 		*cp++ = (BYTE)(crc / 0x100);

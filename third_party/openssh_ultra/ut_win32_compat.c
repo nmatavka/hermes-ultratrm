@@ -337,6 +337,19 @@ int nanosleep64(const struct _timespec64 *request, struct _timespec64 *remain)
     return 0;
     }
 
+int __cdecl clock_gettime64(clockid_t clock_id, struct _timespec64 *tp)
+    {
+    (void)clock_id;
+
+    if (tp == 0)
+        {
+        errno = EINVAL;
+        return -1;
+        }
+
+    return (_timespec64_get(tp, TIME_UTC) == TIME_UTC) ? 0 : -1;
+    }
+
 int chown(const char *path, uid_t owner, gid_t group)
     {
     (void)path;
@@ -632,45 +645,6 @@ int _ssh__compat_glob(const char *pattern, int flags,
 void _ssh__compat_globfree(glob_t *pglob)
     {
     globfree(pglob);
-    }
-
-int scan_scaled(char *scaled, long long *result)
-    {
-    char *end;
-    long long value;
-
-    if (scaled == 0 || result == 0)
-        {
-        errno = EINVAL;
-        return -1;
-        }
-    value = _strtoi64(scaled, &end, 10);
-    if (end == scaled)
-        return -1;
-    switch (*end)
-        {
-        case 'k':
-        case 'K':
-            value *= 1024LL;
-            ++end;
-            break;
-        case 'm':
-        case 'M':
-            value *= 1024LL * 1024LL;
-            ++end;
-            break;
-        case 'g':
-        case 'G':
-            value *= 1024LL * 1024LL * 1024LL;
-            ++end;
-            break;
-        default:
-            break;
-        }
-    if (*end != '\0')
-        return -1;
-    *result = value;
-    return 0;
     }
 
 int sshsk_sign(const char *provider_path, struct sshkey *key,

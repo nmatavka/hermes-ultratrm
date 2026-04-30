@@ -22,5 +22,5 @@ int 	mscIsDirectory(LPCWSTR pszName);
 int 	mscAskWizardQuestionAgain(void);
 void	mscUpdateRegistryValue(void);
 
-HICON	extLoadIcon(LPCSTR);
+HICON	extLoadIcon(LPCWSTR);
 #endif

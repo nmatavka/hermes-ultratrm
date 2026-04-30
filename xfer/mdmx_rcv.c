@@ -300,7 +300,7 @@ int mdmx_rcv(HSESSION hSession, int attended, int method, int single_file)
 
 				/* get info out of packet 0 and open file */
 				StrCharCopy(fname, last_pckt->bdata);
-				for (cp = fname; *cp != '\0'; cp++)
+				for (cp = (unsigned char *)fname; *cp != '\0'; cp++)
 					if (*cp == '/')
 						*cp = '\\';
 
@@ -356,7 +356,7 @@ int mdmx_rcv(HSESSION hSession, int attended, int method, int single_file)
 						StrCharGetByteCount(last_pckt->bdata) + 1;
 				if (*cp)
 					{
-					xc->filesize = atol(cp);
+					xc->filesize = atol((const char *)cp);
 
 					mdmxdspFilesize(xc, xc->filesize);
 					}
@@ -917,7 +917,7 @@ int  xr_collect(ST_MDMX *xc, int count, long timeout,
 	*ptr = cp;
 	*checksum = lchecksum;
 	if (count > 100)
-		*crc = calc_crc(xc, (unsigned)0, head, count);
+		*crc = calc_crc(xc, (unsigned)0, (LPSTR)head, count);
 	return(TRUE);
 	}
 

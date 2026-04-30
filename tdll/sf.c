@@ -1110,7 +1110,11 @@ int sfPutSessionItem(const SF_HANDLE sF,
 	int x, y;
 	int32 dwSlide;
 	int32 dwOffset;
+	int32 dwOldSize;
+	int32 dwOldUsed;
 	int32 dwNewSize;
+	int32 dwTailOffset;
+	int32 dwTailBytes;
 	pstDSII pI;
 	pstDSII pIx, pIy;
 	BYTE *pszData;
@@ -1141,14 +1145,16 @@ int sfPutSessionItem(const SF_HANDLE sF,
 	if (x != (-1))
 		{
 		pIx = pI + x;
+		dwOldUsed = asSessionFiles[uNdx].dwDataUsed;
 		if (pIx->dwSize == 0)
 			{
 			/*
 			 * Its a new item
 			 */
+			dwOldSize = 0;
 			dwSlide = (int32)ulSize;
-				if (x == 0)
-					dwOffset = SF_HEADER_BYTES;
+			if (x == 0)
+				dwOffset = SF_HEADER_BYTES;
 			else
 				dwOffset = (pI+x-1)->dwOffset + (pI+x-1)->dwSize;
 
@@ -1164,6 +1170,7 @@ int sfPutSessionItem(const SF_HANDLE sF,
 			/*
 			 * Its a replacement item
 			 */
+			dwOldSize = pIx->dwSize;
 			dwSlide = (int)ulSize - (int)pIx->dwSize;
 			dwOffset = pIx->dwOffset;
 
@@ -1203,48 +1210,28 @@ int sfPutSessionItem(const SF_HANDLE sF,
 		 * Move the old data to the point necessary
 		 */
 		pszData = asSessionFiles[uNdx].hData;
+		dwTailOffset = dwOffset + dwOldSize;
+		dwTailBytes = dwOldUsed - dwTailOffset;
+		if (dwTailBytes < 0)
+			dwTailBytes = 0;
+
+		if (dwSlide != 0 && dwTailBytes > 0)
+			{
+			memmove(pszData + dwOffset + (int32)ulSize, /* destination */
+					pszData + dwTailOffset,             /* source */
+					(size_t)dwTailBytes);               /* count */
+
+			#if defined(DEBUG_OUTPUT)
+			wsprintf(acBuffer,
+					" move tail from 0x%lx to 0x%lx size 0x%x\r\n",
+					(long)(pszData + dwTailOffset),
+					(long)(pszData + dwOffset + (int32)ulSize),
+					dwTailBytes);
+			OutputDebugString(acBuffer);
+			#endif
+			}
+
 		asSessionFiles[uNdx].dwDataUsed = dwNewSize;
-
-		if (dwSlide < 0)
-			{
-			/* shrink the current space */
-			dwNewSize = asSessionFiles[uNdx].dwDataSize;
-			dwNewSize -= dwOffset;
-			dwNewSize += dwSlide;
-
-			memmove(pszData + dwOffset, 			 /* destination */
-					pszData + dwOffset - dwSlide,	 /* source */
-					(size_t)(dwNewSize - 1));		 /* count */
-
-			#if defined(DEBUG_OUTPUT)
-			wsprintf(acBuffer,
-					" shrink from 0x%lx to 0x%lx size 0x%x\r\n",
-					(long)(pszData + dwOffset - dwSlide),
-					(long)(pszData + dwOffset),
-					dwNewSize -1);
-			OutputDebugString(acBuffer);
-			#endif
-			}
-		else
-			{
-			/* expand the current space */
-			dwNewSize = asSessionFiles[uNdx].dwDataSize;
-			dwNewSize -= dwOffset;
-			dwNewSize -= dwSlide;
-
-			memmove(pszData + dwOffset + dwSlide,	 /* destination */
-					pszData + dwOffset, 			 /* source */
-					(size_t)(dwNewSize - 1)); 		 /* count */
-
-			#if defined(DEBUG_OUTPUT)
-			wsprintf(acBuffer,
-					" expand from 0x%lx to 0x%lx size 0x%x\r\n",
-					(long)(pszData + dwOffset),
-					(long)(pszData + dwOffset + dwSlide),
-					dwNewSize - 1);
-			OutputDebugString(acBuffer);
-			#endif
-			}
 
 		/*
 		 * Copy in the new data

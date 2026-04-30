@@ -365,7 +365,7 @@ long TranslateAddress(const HHDRIVER hhDriver)
 
 		/* --- Put country code in now --- */
 
-		wsprintf(ach, "+%u ", pce->dwCountryCode);
+		wsprintfW(ach, L"+%u ", pce->dwCountryCode);
 		free(pcl);
 		pcl = NULL;
 

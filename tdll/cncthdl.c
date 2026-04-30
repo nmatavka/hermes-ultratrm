@@ -767,8 +767,8 @@ void cnctMessage(const HCNCT hCnct, const int idMsg)
 
 	// Format the string...
 	//
-	wsprintf(acArg1, "%s", pachTime);
-	wsprintf(acArg2, "%s", pachDate);
+	wsprintfW(acArg1, L"%s", pachTime);
+	wsprintfW(acArg2, L"%s", pachDate);
 
 	acPtrs[0] = acArg1;
 	acPtrs[1] = acArg2;
@@ -783,9 +783,9 @@ void cnctMessage(const HCNCT hCnct, const int idMsg)
 	// Hard code until FormatMessage() works!
 	//
 	if (idMsg == IDS_CNCT_CLOSE)
-		wsprintf(ach, "\r\n=====> Disconnected  %s, %s", acPtrs[0], acPtrs[1]);
+		wsprintfW(ach, L"\r\n=====> Disconnected  %s, %s", acPtrs[0], acPtrs[1]);
 	else
-		wsprintf(ach, "\r\n=====> Connected %s, %s\r\n", acPtrs[0], acPtrs[1]);
+		wsprintfW(ach, L"\r\n=====> Connected %s, %s\r\n", acPtrs[0], acPtrs[1]);
 #endif
 
 	free(pachTime);

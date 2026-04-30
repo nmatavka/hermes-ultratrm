@@ -373,6 +373,7 @@ void TP_WM_MOUSEMOVE(const HWND hwnd, const unsigned uFlags,
 		iRow = ((ptEnd.y - 1) + hhTerm->iTopline) % MAX_EMUROWS;
 
 		if (hhTerm->fppstAttr[iRow][ptEnd.x].wirt == TRUE)
+			{
 			if (lEnd > lBeg)
 				{
 				ptEnd.x++;
@@ -381,9 +382,10 @@ void TP_WM_MOUSEMOVE(const HWND hwnd, const unsigned uFlags,
 				{
 				ptEnd.x--;
 				}
+			}
 		}
-    else
-        {
+	else
+	    {
 		iRow = yPos / hhTerm->yChar;
 
 		// If the backscroll buffer is not filling the entire display,

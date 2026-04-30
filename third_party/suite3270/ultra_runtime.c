@@ -1,5 +1,5 @@
 /*
- * UltraTerminal embedded TN3270/TN3270E runtime.
+ * UltraTerminal embedded IBM 3270 runtime.
  *
  * Protocol constants, structured-field reply shape, BIND handling, 3270 write
  * parsing, keyboard/AID behavior, and 3287 process semantics are adapted from
@@ -30,7 +30,7 @@ struct ut3270_runtime
     UT3270_SETTINGS settings;
     UT3270_SNAPSHOT snap;
     int cells;
-    int tn3270e;
+    int enhanced_telnet;
     int keyboard_locked;
     int printer_running;
     int insert_mode;
@@ -170,7 +170,7 @@ int ut3270_runtime_create(UT3270_RUNTIME **out_runtime,
     ut3270_model_dims(runtime->settings.model, &rows, &cols);
     ut3270_runtime_resize(runtime, rows, cols);
     ut3270_runtime_reset_screen(runtime, UT3270_TRUE);
-    ut3270_set_status(runtime, "TN3270 ready");
+    ut3270_set_status(runtime, "IBM 3270 ready");
 
     *out_runtime = runtime;
     return 0;
@@ -182,18 +182,18 @@ void ut3270_runtime_destroy(UT3270_RUNTIME *runtime)
         free(runtime);
     }
 
-void ut3270_runtime_set_telnet_mode(UT3270_RUNTIME *runtime, int tn3270e)
+void ut3270_runtime_set_telnet_mode(UT3270_RUNTIME *runtime, int enhanced_telnet)
     {
     if (runtime == NULL)
         return;
 
-    runtime->tn3270e = tn3270e ? UT3270_TRUE : UT3270_FALSE;
-    if (runtime->tn3270e)
-        runtime->snap.status_flags |= UT3270_STATUS_TN3270E;
+    runtime->enhanced_telnet = enhanced_telnet ? UT3270_TRUE : UT3270_FALSE;
+    if (runtime->enhanced_telnet)
+        runtime->snap.status_flags |= UT3270_STATUS_ENHANCED_TELNET;
     else
-        runtime->snap.status_flags &= ~UT3270_STATUS_TN3270E;
-    ut3270_set_status(runtime, runtime->tn3270e ?
-            "TN3270E negotiated" : "TN3270 negotiated");
+        runtime->snap.status_flags &= ~UT3270_STATUS_ENHANCED_TELNET;
+    ut3270_set_status(runtime, runtime->enhanced_telnet ?
+            "TN3270E Telnet negotiated" : "tn3270 Telnet negotiated");
     }
 
 int ut3270_runtime_feed_record(UT3270_RUNTIME *runtime,
@@ -216,7 +216,7 @@ int ut3270_runtime_feed_record(UT3270_RUNTIME *runtime,
     payload = record;
     payload_len = record_len;
 
-    if (runtime->tn3270e && record_len >= UT_TN3270E_EH_SIZE)
+    if (runtime->enhanced_telnet && record_len >= UT_TN3270E_EH_SIZE)
         {
         data_type = record[0];
         request_flag = record[1];
@@ -255,7 +255,7 @@ int ut3270_runtime_feed_record(UT3270_RUNTIME *runtime,
 
         case UT_TN3270E_DT_UNBIND:
             ut3270_runtime_reset_screen(runtime, UT3270_TRUE);
-            ut3270_set_status(runtime, "TN3270E UNBIND received");
+            ut3270_set_status(runtime, "IBM 3270 UNBIND received");
             if (response_flag == UT_TN3270E_RSF_ALWAYS_RESPONSE ||
                     response_flag == UT_TN3270E_RSF_ERROR_RESPONSE)
                 return ut3270_wrap_response(runtime, seq,
@@ -281,7 +281,7 @@ int ut3270_runtime_feed_record(UT3270_RUNTIME *runtime,
         case UT_TN3270E_DT_RESPONSE:
         default:
             (void)request_flag;
-            ut3270_set_status(runtime, "TN3270E control record received");
+            ut3270_set_status(runtime, "IBM 3270 control record received");
             return 0;
             }
         }
@@ -402,14 +402,14 @@ int ut3270_runtime_snapshot(UT3270_RUNTIME *runtime,
         return -1;
 
     runtime->snap.status_flags &= ~(UT3270_STATUS_KEYBOARD_LOCKED |
-            UT3270_STATUS_PRINTER_RUNNING | UT3270_STATUS_TN3270E |
+            UT3270_STATUS_PRINTER_RUNNING | UT3270_STATUS_ENHANCED_TELNET |
             UT3270_STATUS_TLS_REQUESTED);
     if (runtime->keyboard_locked)
         runtime->snap.status_flags |= UT3270_STATUS_KEYBOARD_LOCKED;
     if (runtime->printer_running)
         runtime->snap.status_flags |= UT3270_STATUS_PRINTER_RUNNING;
-    if (runtime->tn3270e)
-        runtime->snap.status_flags |= UT3270_STATUS_TN3270E;
+    if (runtime->enhanced_telnet)
+        runtime->snap.status_flags |= UT3270_STATUS_ENHANCED_TELNET;
     if (runtime->settings.tls_mode != UT3270_TLS_OFF)
         runtime->snap.status_flags |= UT3270_STATUS_TLS_REQUESTED;
     runtime->snap.reply_mode = (unsigned char)runtime->reply_mode;
@@ -502,7 +502,7 @@ int ut3270_runtime_indfile_send(UT3270_RUNTIME *runtime, const char *local,
     ut3270_set_status(runtime,
             "IND$FILE send requested; transfer UI hook is active");
     ut3270_safe_copy(message, message_len,
-            "IND$FILE send is routed to the TN3270 runtime; full DFT transfer "
+            "IND$FILE send is routed to the IBM 3270 runtime; full DFT transfer "
             "dialog wiring still requires a host transfer request.");
     return 0;
     }
@@ -518,7 +518,7 @@ int ut3270_runtime_indfile_receive(UT3270_RUNTIME *runtime, const char *remote,
     ut3270_set_status(runtime,
             "IND$FILE receive requested; transfer UI hook is active");
     ut3270_safe_copy(message, message_len,
-            "IND$FILE receive is routed to the TN3270 runtime; full DFT "
+            "IND$FILE receive is routed to the IBM 3270 runtime; full DFT "
             "transfer dialog wiring still requires a host transfer request.");
     return 0;
     }
@@ -688,7 +688,7 @@ static int ut3270_wrap_3270_payload(UT3270_RUNTIME *runtime,
     unsigned char tmp[UT3270_TX_LIMIT];
     int pos;
 
-    if (!runtime->tn3270e)
+    if (!runtime->enhanced_telnet)
         return ut3270_frame_payload(runtime, payload, payload_len, out,
                 out_limit, out_len);
 
@@ -719,7 +719,7 @@ static int ut3270_wrap_response(UT3270_RUNTIME *runtime,
     {
     unsigned char payload[UT_TN3270E_EH_SIZE + 1];
 
-    if (!runtime->tn3270e)
+    if (!runtime->enhanced_telnet)
         {
         if (out_len)
             *out_len = 0;
@@ -1019,8 +1019,8 @@ static int ut3270_parse_write(UT3270_RUNTIME *runtime,
             }
         }
 
-    ut3270_set_status(runtime, runtime->tn3270e ?
-            "TN3270E screen updated" : "TN3270 screen updated");
+    ut3270_set_status(runtime, runtime->enhanced_telnet ?
+            "IBM 3270 screen updated" : "IBM 3270 screen updated");
     return 0;
     }
 
@@ -1416,7 +1416,7 @@ static void ut3270_parse_bind(UT3270_RUNTIME *runtime,
 
     if (buf == NULL || len < 1 || buf[0] != UT3270_BIND_RU)
         {
-        ut3270_set_status(runtime, "TN3270E BIND image ignored");
+        ut3270_set_status(runtime, "IBM 3270 BIND image ignored");
         return;
         }
 
@@ -1489,7 +1489,7 @@ static void ut3270_parse_bind(UT3270_RUNTIME *runtime,
             }
         }
 
-    ut3270_set_status(runtime, "TN3270E BIND applied");
+    ut3270_set_status(runtime, "IBM 3270 BIND applied");
     }
 
 static void ut3270_parse_scs(UT3270_RUNTIME *runtime,

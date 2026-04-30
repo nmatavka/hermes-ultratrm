@@ -131,7 +131,7 @@ int transLoadHandle(VOID *pHdl)
 	{
 	pstICT pstI;
 	SF_HANDLE hSF;
-	long lSize;
+	unsigned long lSize;
 
 	pstI = (pstICT)pHdl;
 
@@ -1160,5 +1160,4 @@ int transSetMode(VOID *pHdl,
 	
 	return(1);
 	}
-
 

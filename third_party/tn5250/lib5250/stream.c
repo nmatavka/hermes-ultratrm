@@ -23,7 +23,7 @@
 
 /* External declarations of initializers for each type of stream. */
 extern int tn5250_telnet_stream_init(Tn5250Stream* This);
-extern int tn5250_ultra_stream_init(Tn5250Stream* This);
+extern int ibm5250_ultra_stream_init(Tn5250Stream* This);
 #ifdef HAVE_LIBSSL
 extern int tn5250_ssl_stream_init(Tn5250Stream* This);
 #endif
@@ -44,7 +44,7 @@ static const Tn5250StreamType stream_types[] = {
     // clang-format off
     { "telnet:",     tn5250_telnet_stream_init },
     { "tn5250:",     tn5250_telnet_stream_init },
-    { "ultra:",      tn5250_ultra_stream_init  },
+    { "ultra:",      ibm5250_ultra_stream_init },
 #ifdef HAVE_LIBSSL
     { "ssl:",        tn5250_ssl_stream_init    },
     { "telnet-ssl:", tn5250_ssl_stream_init    },

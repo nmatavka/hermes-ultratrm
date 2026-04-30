@@ -777,7 +777,7 @@ int zsendfile(ZC *zc, char *buf, int blen)
 		/* ZF3 is for ZTSPARS (special sparse file option) */
 		zc->Txhdr[ZF3] = 0;
 		zsbhdr(zc, ZFILE, zc->Txhdr);
-		zsdata(zc, buf, blen, ZCRCW);
+		zsdata(zc, (BYTE *)buf, blen, ZCRCW);
 		if (zc->xfertimer == (-1L))
 			zc->xfertimer = startinterval();
 

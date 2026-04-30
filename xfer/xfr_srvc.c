@@ -314,6 +314,7 @@ static int xfrUniqueName(HSESSION hSession, LPWSTR pszSrc, LPWSTR pszDst)
 	WCHAR *pszFName = NULL;
 	WCHAR *pszExtension = NULL;
 	WCHAR *pszScan = NULL;
+	DWORD dwComponentSize = 0;
 	long  nComponentSize = 0L;
 	int   nNameSpace;
 	int   nTag = 0;
@@ -321,7 +322,8 @@ static int xfrUniqueName(HSESSION hSession, LPWSTR pszSrc, LPWSTR pszDst)
 
 	// Let Operating system figure out full name. This will also set pszFName
 	//	to point to the file name component of the path.
-	nSize = GetFullPathName(pszSrc, sizeof(szSrc), szSrc, &pszFName);
+	nSize = GetFullPathNameW(pszSrc, sizeof(szSrc) / sizeof(szSrc[0]),
+			szSrc, &pszFName);
 	if (nSize)
 		{
 		if (pszFName)
@@ -342,18 +344,20 @@ static int xfrUniqueName(HSESSION hSession, LPWSTR pszSrc, LPWSTR pszDst)
 		// Find maximum length of path component (this is platform dependent)
 
 		// TODO:jkh, 12/19/94  Different drives may use different sizes
-		if (!GetVolumeInformation(NULL, NULL, 0, NULL, &nComponentSize,
+		if (!GetVolumeInformationW(NULL, NULL, 0, NULL, &dwComponentSize,
 				NULL, NULL, 0))
 			nComponentSize = 12;	// Safest size if call fails
+		else
+			nComponentSize = (long)dwComponentSize;
 
 		// Try attaching numeric tags to the name until name is unique
-		nNameSpace = nComponentSize - StrCharGetByteCount(pszExtension);
+		nNameSpace = (int)nComponentSize - StrCharGetStrLength(pszExtension);
 		for (nTag = 0; nTag < 10000; ++nTag)
 			{
-			_itoa(nTag, szTag, 10);
+			wsprintfW(szTag, L"%d", nTag);
 			// make sure tag will fit on filename
-			while (StrCharGetByteCount(szName) >
-					nNameSpace - StrCharGetByteCount(szTag))
+			while (StrCharGetStrLength(szName) >
+					nNameSpace - StrCharGetStrLength(szTag))
 				{
 				pszScan = StrCharLast(szName);
 				*pszScan = L'\0';

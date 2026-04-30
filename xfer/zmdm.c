@@ -116,7 +116,7 @@ void zsbhdr(ZC *zc, int type, BYTE *hdr)
 	xsendline(zc, &zc->stP, ZPAD);
 	xsendline(zc, &zc->stP, ZDLE);
 
-	if (zc->Crc32t = zc->Txfcs32)
+	if ((zc->Crc32t = zc->Txfcs32) != 0)
 		zsbh32(zc, hdr, type);
 	else
 		{

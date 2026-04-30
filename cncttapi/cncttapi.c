@@ -16,6 +16,8 @@
 //#define DEBUGSTR
 
 #include <time.h>
+#include <stdlib.h>
+#include <wchar.h>
 
 #include <tdll/stdtyp.h>
 #include <tdll/session.h>
@@ -39,9 +41,9 @@
 #include <term/res.h>
 #include "cncttapi.h"
 #include "cncttapi.hh"
-#include <tdll/XFER_MSC.HH>     // XD_TYPE
-#include <tdll/XFER_MSC.H>      // xfrGetDisplayWindow(), xfrDoTransfer()
-#include "tdll/XFDSPDLG.H"      // XFR_SHUTDOWN
+#include <tdll/xfer_msc.hh>     // XD_TYPE
+#include <tdll/xfer_msc.h>      // xfrGetDisplayWindow(), xfrDoTransfer()
+#include "tdll/xfdspdlg.h"      // XFR_SHUTDOWN
 
 static int DoNewModemWizard(HWND hWnd, int iTimeout);
 static int tapiReinit(const HHDRIVER hhDriver);
@@ -55,6 +57,63 @@ const WCHAR *g_achApp = L"UltraTerminal";
 static HHDRIVER gbl_hhDriver;	// see LINEDEVSTATE for explaination.
 
 #if defined(INCL_SSH)
+static void cnctdrvCopyWide(WCHAR *pszDest, int cchDest,
+        const WCHAR *pszSrc)
+    {
+    if (pszDest == NULL || cchDest <= 0)
+        return;
+    lstrcpynW(pszDest, pszSrc ? pszSrc : L"", cchDest);
+    pszDest[cchDest - 1] = L'\0';
+    }
+
+static void cnctdrvSplitSshHostSpec(const WCHAR *pszSpec,
+        WCHAR *pszUser, int cchUser, WCHAR *pszHost, int cchHost,
+        int *piPort)
+    {
+    WCHAR achWork[256];
+    WCHAR *pszAt;
+    WCHAR *pszColon;
+    WCHAR *pszEnd;
+
+    if (pszUser && cchUser > 0)
+        pszUser[0] = L'\0';
+    if (pszHost && cchHost > 0)
+        pszHost[0] = L'\0';
+    if (piPort)
+        *piPort = 0;
+
+    cnctdrvCopyWide(achWork, sizeof(achWork) / sizeof(WCHAR), pszSpec);
+    pszAt = wcschr(achWork, L'@');
+    if (pszAt != NULL)
+        {
+        *pszAt++ = L'\0';
+        cnctdrvCopyWide(pszUser, cchUser, achWork);
+        cnctdrvCopyWide(achWork, sizeof(achWork) / sizeof(WCHAR), pszAt);
+        }
+
+    if (achWork[0] == L'[')
+        {
+        WCHAR *pszClose = wcschr(achWork, L']');
+        if (pszClose != NULL)
+            {
+            *pszClose = L'\0';
+            cnctdrvCopyWide(pszHost, cchHost, achWork + 1);
+            if (pszClose[1] == L':' && piPort)
+                *piPort = (int)wcstol(pszClose + 2, &pszEnd, 10);
+            return;
+            }
+        }
+
+    pszColon = wcsrchr(achWork, L':');
+    if (pszColon != NULL && wcschr(achWork, L':') == pszColon)
+        {
+        *pszColon++ = L'\0';
+        if (piPort)
+            *piPort = (int)wcstol(pszColon, &pszEnd, 10);
+        }
+    cnctdrvCopyWide(pszHost, cchHost, achWork);
+    }
+
 static void cnctdrvSshSetting(HCOM hCom, const WCHAR *pszName,
         const WCHAR *pszValue)
     {
@@ -86,13 +145,22 @@ static int cnctdrvConfigureSsh(const HHDRIVER hhDriver, HCOM hCom)
     int nMode;
     int iPort;
     int iTargetPort;
+    int iHostSpecPort;
+    int nEmuId;
+    HEMU hEmu;
     const WCHAR *pszSshHost;
     const WCHAR *pszTargetHost;
+    WCHAR achSshUser[MAX_SSH_USER_LEN];
+    WCHAR achSshHost[MAX_SSH_HOST_LEN];
+    WCHAR achTargetHost[MAX_IP_ADDR_LEN];
 
     nMode = hhDriver->nTransport;
     if (nMode == CNCT_TRANSPORT_DIRECT_TCP)
         nMode = (hhDriver->dwPermanentLineId == DIRECT_COMSSH) ?
                 CNCT_TRANSPORT_SSH_INTERACTIVE : CNCT_TRANSPORT_SSH_TUNNEL;
+
+    hEmu = sessQueryEmuHdl(hhDriver->hSession);
+    nEmuId = hEmu ? emuQueryEmulatorId(hEmu) : EMU_AUTO;
 
     iPort = hhDriver->iSshPort > 0 ? hhDriver->iSshPort : 22;
     iTargetPort = hhDriver->iSshTargetPort > 0 ?
@@ -107,16 +175,49 @@ static int cnctdrvConfigureSsh(const HHDRIVER hhDriver, HCOM hCom)
     pszTargetHost = hhDriver->achSshTargetHost[0] != L'\0' ?
             hhDriver->achSshTargetHost : hhDriver->achDestAddr;
 
+    cnctdrvCopyWide(achSshUser, sizeof(achSshUser) / sizeof(WCHAR),
+            hhDriver->achSshUser);
+    cnctdrvSplitSshHostSpec(pszSshHost, achSshUser,
+            sizeof(achSshUser) / sizeof(WCHAR), achSshHost,
+            sizeof(achSshHost) / sizeof(WCHAR), &iHostSpecPort);
+    if (achSshHost[0] == L'\0')
+        cnctdrvCopyWide(achSshHost, sizeof(achSshHost) / sizeof(WCHAR),
+                pszSshHost);
+    if (iHostSpecPort > 0)
+        iPort = iHostSpecPort;
+
+    cnctdrvSplitSshHostSpec(pszTargetHost, NULL, 0, achTargetHost,
+            sizeof(achTargetHost) / sizeof(WCHAR), NULL);
+    if (achTargetHost[0] == L'\0')
+        cnctdrvCopyWide(achTargetHost, sizeof(achTargetHost) / sizeof(WCHAR),
+                pszTargetHost);
+
+    /*
+     * Pub400 and similar IBM i services commonly expose SSH on 2222 while
+     * the IBM 5250 endpoint remains port 23 behind the SSH server.  The
+     * compact "host + port" page has only one visible port field, so treat
+     * 2222 as the SSH port for IBM tunnel sessions unless the advanced
+     * target port field was explicitly saved.
+     */
+    if (nMode == CNCT_TRANSPORT_SSH_TUNNEL &&
+            (nEmuId == EMU_IBM3270 || nEmuId == EMU_IBM5250) &&
+            hhDriver->iSshTargetPort <= 0 && hhDriver->iPort == 2222 &&
+            hhDriver->iSshPort == 22)
+        {
+        iPort = 2222;
+        iTargetPort = 23;
+        }
+
     cnctdrvSshSettingInt(hCom, L"MODE", nMode);
-    cnctdrvSshSetting(hCom, L"SSHHOST", pszSshHost);
+    cnctdrvSshSetting(hCom, L"SSHHOST", achSshHost);
     cnctdrvSshSettingInt(hCom, L"SSHPORT", iPort);
-    cnctdrvSshSetting(hCom, L"SSHUSER", hhDriver->achSshUser);
+    cnctdrvSshSetting(hCom, L"SSHUSER", achSshUser);
     cnctdrvSshSetting(hCom, L"SSHCONFIG", hhDriver->achSshConfigPath);
     cnctdrvSshSetting(hCom, L"KNOWNHOSTS",
             hhDriver->achSshKnownHostsPath);
     cnctdrvSshSetting(hCom, L"IDENTITIES",
             hhDriver->achSshIdentityFiles);
-    cnctdrvSshSetting(hCom, L"TARGETHOST", pszTargetHost);
+    cnctdrvSshSetting(hCom, L"TARGETHOST", achTargetHost);
     cnctdrvSshSettingInt(hCom, L"TARGETPORT", iTargetPort);
     cnctdrvSshSetting(hCom, L"PROXY", hhDriver->achSshProxy);
     cnctdrvSshSetting(hCom, L"FORWARDINGS", hhDriver->achSshForwardings);
@@ -453,6 +554,7 @@ int WINAPI cnctdrvInit(const HHDRIVER hhDriver)
 	
 #if defined(INCL_WINSOCK)
 	hhDriver->iPort = 23;
+	hhDriver->nTcpTlsMode = CNCT_TCP_TLS_OFF;
 	hhDriver->achDestAddr[0] = L'\0';
 #endif
 
@@ -533,6 +635,14 @@ int WINAPI cnctdrvLoad(const HHDRIVER hhDriver)
     ul = sizeof(hhDriver->iPort);
     sfGetSessionItem(sfhdl, SFID_CNCT_IPPORT, &ul, &hhDriver->iPort);
 
+	hhDriver->nTcpTlsMode = CNCT_TCP_TLS_OFF;
+	ul = sizeof(hhDriver->nTcpTlsMode);
+	sfGetSessionItem(sfhdl, SFID_CNCT_TCP_TLS_MODE, &ul,
+		&hhDriver->nTcpTlsMode);
+	if (hhDriver->nTcpTlsMode < CNCT_TCP_TLS_OFF ||
+			hhDriver->nTcpTlsMode > CNCT_TCP_TLS_IMPLICIT)
+		hhDriver->nTcpTlsMode = CNCT_TCP_TLS_OFF;
+
 	hhDriver->achDestAddr[0] = L'\0';
 	ul = sizeof(hhDriver->achDestAddr);
 	sfGetSessionItem(sfhdl, SFID_CNCT_IPDEST, &ul, hhDriver->achDestAddr);
@@ -603,6 +713,21 @@ int WINAPI cnctdrvLoad(const HHDRIVER hhDriver)
 		hhDriver->achComDeviceName[0] = L'\0';
 		ul = sizeof(hhDriver->achComDeviceName);
 		sfGetSessionItem(sfhdl, SFID_CNCT_COMDEVICE, &ul, hhDriver->achComDeviceName);
+		}
+
+	/*
+	 * Direct COM, direct TCP, and SSH sessions do not use TAPI state.
+	 * Reloading TAPI here is unnecessary and can interfere with saved
+	 * network sessions under Wine.
+	 */
+	if (IN_RANGE(hhDriver->dwPermanentLineId, DIRECT_COM1, DIRECT_COM4) ||
+			hhDriver->dwPermanentLineId == DIRECT_COM_DEVICE ||
+			hhDriver->dwPermanentLineId == DIRECT_COMWINSOCK ||
+			hhDriver->dwPermanentLineId == DIRECT_COMSSH)
+		{
+		hhDriver->fMatchedPermanentLineID = TRUE;
+		hhDriver->dwLine = (DWORD)-1;
+		return 0;
 		}
 
    	// ----------------------------------------------------------------
@@ -743,6 +868,9 @@ int WINAPI cnctdrvSave(const HHDRIVER hhDriver)
 #if defined (INCL_WINSOCK)
 	sfPutSessionItem(sfhdl, SFID_CNCT_IPPORT, sizeof(hhDriver->iPort),
 		&hhDriver->iPort);
+
+	sfPutSessionItem(sfhdl, SFID_CNCT_TCP_TLS_MODE,
+		sizeof(hhDriver->nTcpTlsMode), &hhDriver->nTcpTlsMode);
 
 	sfPutSessionItem(sfhdl, SFID_CNCT_IPDEST,
 		(lstrlen(hhDriver->achDestAddr) + 1) * sizeof(WCHAR),
@@ -1165,7 +1293,7 @@ int WINAPI cnctdrvComEvent(const HHDRIVER hhDriver, const enum COM_EVENTS event)
 	int		iRet;
 	WCHAR 	ach[80];
 #if defined(INCL_WINSOCK)
-	char	achMsg[512];
+	WCHAR	achMsg[512];
 #endif
 	HCOM	hCom;
 
@@ -1183,13 +1311,14 @@ int WINAPI cnctdrvComEvent(const HHDRIVER hhDriver, const enum COM_EVENTS event)
 	    if (hhDriver->dwPermanentLineId == DIRECT_COMWINSOCK)
 		    {
 		    hCom = sessQueryComHdl(hhDriver->hSession);
-		    iRet = ComDriverSpecial(hCom, "Query ISCONNECTED", ach, sizeof(ach) / sizeof(WCHAR));
+		    iRet = ComDriverSpecial(hCom, L"Query ISCONNECTED", ach,
+				sizeof(ach) / sizeof(WCHAR));
 
 		    if (iRet == COM_OK)
 			    {
 			    // Do we want to initiate a disconnect?  Only if we're
 			    // connected.
-			    if (ach[0] == '0')
+			    if (ach[0] == L'0')
 				    {
 
 				    if (hhDriver->iStatus == CNCT_STATUS_TRUE)
@@ -1207,14 +1336,14 @@ int WINAPI cnctdrvComEvent(const HHDRIVER hhDriver, const enum COM_EVENTS event)
 
 					    LoadString(glblQueryDllHinst(), IDS_ER_TCPIP_BADADDR,
 						    ach, sizeof(ach) / sizeof(WCHAR));
-					    wsprintf(achMsg, ach, hhDriver->achDestAddr,
+					    wsprintfW(achMsg, ach, hhDriver->achDestAddr,
                             hhDriver->iPort);
 					    TimedMessageBox(sessQueryHwnd(hhDriver->hSession),
                             achMsg, 0, MB_OK | MB_ICONINFORMATION,
 						    sessQueryTimeout(hhDriver->hSession));
 					    }
 				    }
-			    else if (ach[0] == '1')
+			    else if (ach[0] == L'1')
 				    {
 				    SetStatus(hhDriver, CNCT_STATUS_TRUE);
 				    }
@@ -1232,11 +1361,12 @@ int WINAPI cnctdrvComEvent(const HHDRIVER hhDriver, const enum COM_EVENTS event)
 				// get any event while connected
 				// - mpt:08-26-97
 			    hCom = sessQueryComHdl(hhDriver->hSession);
-			    iRet = ComDriverSpecial(hCom, "Query DCD_STATUS", ach, sizeof(ach) / sizeof(WCHAR));
+			    iRet = ComDriverSpecial(hCom, L"Query DCD_STATUS", ach,
+					sizeof(ach) / sizeof(WCHAR));
 			
 				if (iRet == COM_OK)
 				    {
-				    if (ach[0] == '0')
+				    if (ach[0] == L'0')
 						{
 						// If we are direct cabled, and we're connected, then
 						// the other end just disconnected, so disconnect now.
@@ -1411,9 +1541,9 @@ int DoMakeCall(const HHDRIVER hhDriver, const unsigned int uFlags)
                         hhDriver->dwCountryCode, &hhDriver->stCallPar)) < 0)
             {
             #if defined(_DEBUG)
-            char ach[50];
-            wsprintf(ach, "lineMakeCall returned %x", hhDriver->lMakeCallId);
-            MessageBox (0, ach, "debug", MB_OK);
+            WCHAR achDbg[50];
+            wsprintfW(achDbg, L"lineMakeCall returned %x", hhDriver->lMakeCallId);
+            MessageBoxW(0, achDbg, L"debug", MB_OK);
             #endif
 
             switch (hhDriver->lMakeCallId)
@@ -1710,7 +1840,7 @@ NEWPHONEDLG:
 			{
 			/* --- Bring up the port configure dialog --- */
 
-			wsprintf(ach, "COM%d",
+			wsprintfW(ach, L"COM%d",
 				hhDriver->dwPermanentLineId - DIRECT_COM1 + 1);
 
 			ComSetPortName(hCom, ach);
@@ -1844,7 +1974,7 @@ NEWPHONEDLG:
 	if (IN_RANGE(hhDriver->dwPermanentLineId, DIRECT_COM1, DIRECT_COM4))
 		{
         int iActivatePortReturn = IDS_ER_CNCT_PORTFAILED;
-		wsprintf(achCom, "COM%d", hhDriver->dwPermanentLineId -
+		wsprintfW(achCom, L"COM%d", hhDriver->dwPermanentLineId -
 			DIRECT_COM1 + 1);
 
         if (TRAP(ComSetPortName(hCom, achCom)) != COM_OK ||
@@ -1892,7 +2022,15 @@ NEWPHONEDLG:
 		{
 		int iPort;
 
-		ComLoadSshDriver(hCom);
+		if (ComLoadSshDriver(hCom) != COM_OK)
+			{
+			LoadString(glblQueryDllHinst(), IDS_ER_TCPIP_FAILURE,
+				ach, sizeof(ach) / sizeof(WCHAR));
+			TimedMessageBox(sessQueryHwnd(hhDriver->hSession), ach, 0,
+				MB_OK | MB_ICONINFORMATION,
+				sessQueryTimeout(hhDriver->hSession));
+			return -1;
+			}
 		ComSetAutoDetect(hCom, FALSE);
 		iPort = sessQueryTelnetPort(hhDriver->hSession);
 		if (iPort != 0 && hhDriver->iPort == 0)
@@ -1906,8 +2044,17 @@ NEWPHONEDLG:
 		SetStatus(hhDriver, CNCT_STATUS_CONNECTING);
 		if (ComActivatePort(hCom, 0) != COM_OK)
 			{
+			ach[0] = L'\0';
+			ComDriverSpecial(hCom, L"QUERY ERROR", ach,
+				sizeof(ach) / sizeof(WCHAR));
+			if (ach[0] == L'\0')
+				ComDriverSpecial(hCom, L"QUERY STATUS", ach,
+					sizeof(ach) / sizeof(WCHAR));
+			if (ach[0] == L'\0')
+				{
 			LoadString(glblQueryDllHinst(), IDS_ER_TCPIP_FAILURE,
 				ach, sizeof(ach) / sizeof(WCHAR));
+				}
 
 			TimedMessageBox(sessQueryHwnd(hhDriver->hSession), ach, 0,
 				MB_OK | MB_ICONINFORMATION,
@@ -1926,7 +2073,15 @@ NEWPHONEDLG:
 		int iPort;
 
 		/* --- Load the Winsock Com  drivers --- */
-		ComLoadWinsockDriver(hCom);
+		if (ComLoadWinsockDriver(hCom) != COM_OK)
+			{
+			LoadString(glblQueryDllHinst(), IDS_ER_TCPIP_FAILURE,
+				ach, sizeof(ach) / sizeof(WCHAR));
+			TimedMessageBox(sessQueryHwnd(hhDriver->hSession), ach, 0,
+				MB_OK | MB_ICONINFORMATION,
+				sessQueryTimeout(hhDriver->hSession));
+			return -1;
+			}
 
         // Baud rate, etc. are meaningless for TCP/IP connections
         //
@@ -1958,11 +2113,11 @@ NEWPHONEDLG:
 #ifdef INCL_CALL_ANSWERING
         if (uFlags & CNCT_ANSWER)
             {
-            wsprintf(szInstruct, "SET ANSWER=1");
+            wsprintfW(szInstruct, L"SET ANSWER=1");
             }
         else
             {
-            wsprintf(szInstruct, "SET ANSWER=0");
+            wsprintfW(szInstruct, L"SET ANSWER=0");
             }
         ComDriverSpecial(hCom, szInstruct, szResult, sizeof(szResult) / sizeof(WCHAR));
 #endif
@@ -1986,11 +2141,35 @@ NEWPHONEDLG:
 		ComDriverSpecial(hCom, szInstruct, szResult,
 					  sizeof(szResult) / sizeof(WCHAR));
 
-		wsprintf(szInstruct, "SET PORTNUM=%ld", hhDriver->iPort);
-		ComDriverSpecial(hCom, szInstruct,
-					  szResult, sizeof(szResult) / sizeof(WCHAR));
+			wsprintfW(szInstruct, L"SET PORTNUM=%ld", hhDriver->iPort);
+			ComDriverSpecial(hCom, szInstruct,
+						  szResult, sizeof(szResult) / sizeof(WCHAR));
 
-#ifdef INCL_CALL_ANSWERING
+			{
+			if (hhDriver->nTcpTlsMode == CNCT_TCP_TLS_STARTTLS)
+				{
+				ComDriverSpecial(hCom, L"SET TLS=1", szResult,
+						sizeof(szResult) / sizeof(WCHAR));
+				ComDriverSpecial(hCom, L"SET TLSIMPLICIT=0", szResult,
+						sizeof(szResult) / sizeof(WCHAR));
+				}
+			else if (hhDriver->nTcpTlsMode == CNCT_TCP_TLS_IMPLICIT)
+				{
+				ComDriverSpecial(hCom, L"SET TLS=0", szResult,
+						sizeof(szResult) / sizeof(WCHAR));
+				ComDriverSpecial(hCom, L"SET TLSIMPLICIT=1", szResult,
+						sizeof(szResult) / sizeof(WCHAR));
+				}
+			else
+				{
+				ComDriverSpecial(hCom, L"SET TLS=0", szResult,
+						sizeof(szResult) / sizeof(WCHAR));
+				ComDriverSpecial(hCom, L"SET TLSIMPLICIT=0", szResult,
+						sizeof(szResult) / sizeof(WCHAR));
+				}
+			}
+
+	#ifdef INCL_CALL_ANSWERING
         if (uFlags & CNCT_ANSWER)
             {
             SetStatus(hhDriver, CNCT_STATUS_ANSWERING);
@@ -2009,7 +2188,7 @@ NEWPHONEDLG:
 			LoadString(glblQueryDllHinst(), IDS_ER_TCPIP_FAILURE,
 			achNewCnct, sizeof(achNewCnct) / sizeof(WCHAR));
 
-			TimedMessageBox(sessQueryHwnd(hhDriver->hSession), ach, 0,
+			TimedMessageBox(sessQueryHwnd(hhDriver->hSession), achNewCnct, 0,
 				MB_OK | MB_ICONINFORMATION,
 				sessQueryTimeout(hhDriver->hSession));
 
@@ -2101,12 +2280,13 @@ static int DoDelayedCall(const HHDRIVER hhDriver)
 	WCHAR *pach;
 	long  lDialRet;
 
-	#define DIAL_DELIMITERS "Ww@$?"
+	#define DIAL_DELIMITERS L"Ww@$?"
+	WCHAR *pachContext = NULL;
 
 	hhDriver->lMakeCallId = -1;
 	lstrcpy(ach, hhDriver->achDialableDest);
 
-	if ((pach = strtok(ach, DIAL_DELIMITERS)) == 0)
+	if ((pach = wcstok(ach, DIAL_DELIMITERS, &pachContext)) == 0)
 		return -1;
 
 	while (pach)
@@ -2116,8 +2296,8 @@ static int DoDelayedCall(const HHDRIVER hhDriver)
 		// If this is the last segment of the string, don't append the
 		// semicolon.
 		//
-		if ((pach = strtok(NULL, DIAL_DELIMITERS)) != 0)
-			lstrcat(ach2, ";");
+		if ((pach = wcstok(NULL, DIAL_DELIMITERS, &pachContext)) != 0)
+			lstrcatW(ach2, L";");
 
 		if (hhDriver->lMakeCallId < 0)
 			{
@@ -2129,9 +2309,9 @@ static int DoDelayedCall(const HHDRIVER hhDriver)
 					&hhDriver->stCallPar)) < 0)
 				{
 				#if defined(_DEBUG)
-				char ach[50];
-				wsprintf(ach, "DoDelayedCall returned %x", hhDriver->lMakeCallId);
-				MessageBox(GetFocus(), ach, "debug", MB_OK);
+				WCHAR achDbg[50];
+				wsprintfW(achDbg, L"DoDelayedCall returned %x", hhDriver->lMakeCallId);
+				MessageBoxW(GetFocus(), achDbg, L"debug", MB_OK);
 				#endif
 
 				return -3;
@@ -2147,9 +2327,9 @@ static int DoDelayedCall(const HHDRIVER hhDriver)
 				hhDriver->dwCountryCode)) < 0)
 				{
 				#if defined(_DEBUG)
-				char ach[50];
-				wsprintf(ach, "lineDial returned %x", lDialRet);
-				MessageBox(GetFocus(), ach, "debug", MB_OK);
+				WCHAR achDbg[50];
+				wsprintfW(achDbg, L"lineDial returned %x", lDialRet);
+				MessageBoxW(GetFocus(), achDbg, L"debug", MB_OK);
 				#endif
 
 				return -4;
@@ -2196,7 +2376,7 @@ int WINAPI cnctdrvDisconnect(const HHDRIVER hhDriver, const unsigned int uFlags)
     #if defined(INCL_REDIAL_ON_BUSY)
     HKEY      hKey;
     DWORD     dwSize;
-    BYTE      ab[20];
+    WCHAR     achRedial[20];
     #endif
     HXFER     hXfer;
     XD_TYPE*  pX;
@@ -2338,14 +2518,16 @@ int WINAPI cnctdrvDisconnect(const HHDRIVER hhDriver, const unsigned int uFlags)
 			hhDriver->uDiscnctFlags = uFlags;
             hhDriver->iRedialSecsRemaining = 2;
 
-            if (RegOpenKeyEx(HKEY_LOCAL_MACHINE,
-                "SOFTWARE\\Microsoft\\UltraTerminal\\TimeToRedial", 0, KEY_READ,
+            if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+                L"SOFTWARE\\Microsoft\\UltraTerminal\\TimeToRedial", 0, KEY_READ,
                     &hKey) == ERROR_SUCCESS)
                 {
-                dwSize = sizeof(ab);
+                dwSize = sizeof(achRedial);
 
-                if (RegQueryValueEx(hKey, "", 0, 0, ab, &dwSize) == ERROR_SUCCESS)
-                    hhDriver->iRedialSecsRemaining = atoi(ab);
+                if (RegQueryValueExW(hKey, L"", 0, 0,
+                        (LPBYTE)achRedial, &dwSize) == ERROR_SUCCESS)
+                    hhDriver->iRedialSecsRemaining =
+                            (int)wcstol(achRedial, NULL, 10);
 
                 RegCloseKey(hKey);
                 }
@@ -2398,9 +2580,9 @@ void CALLBACK lineCallbackFunc(DWORD hDevice, DWORD dwMsg, DWORD_PTR dwCallback,
 
 	#if 0
 	{
-	char ach[256];
-	wsprintf(ach,"%x %x", dwMsg, dwParm1);
-	MessageBox(GetFocus(), ach, "debug", MB_OK);
+	WCHAR achDbg[256];
+	wsprintfW(achDbg,L"%x %Ix", dwMsg, dwParm1);
+	MessageBoxW(GetFocus(), achDbg, L"debug", MB_OK);
 	}
 	#endif
 
@@ -2720,9 +2902,9 @@ int Handoff(const HHDRIVER hhDriver)
 			(DWORD_PTR)hdl)) != COM_OK)
 		{
         #if !defined(NDEBUG)
-		char ach[256];
-		wsprintf(ach, "hdl=%x, i=%d", hdl, i);
-		MessageBox(0, ach, "debug", MB_OK);
+		WCHAR achDbg[256];
+		wsprintfW(achDbg, L"hdl=%Ix, i=%d", (UINT_PTR)hdl, i);
+		MessageBoxW(0, achDbg, L"debug", MB_OK);
         #endif
 
 		assert(FALSE);
@@ -2972,7 +3154,7 @@ static int tapiReinit(const HHDRIVER hhDriver)
 int WINAPI cnctdrvSetDestination(const HHDRIVER hhDriver, WCHAR * const ach,
 								 const size_t cb)
 	{
-	int len;
+	int cch;
 
 	if (hhDriver == 0 || ach == 0 || cb == 0)
 		{
@@ -2980,9 +3162,9 @@ int WINAPI cnctdrvSetDestination(const HHDRIVER hhDriver, WCHAR * const ach,
 		return -1;
 		}
 
-	len = (int) min(cb, sizeof(hhDriver->achDest));
-	strncpy(hhDriver->achDest, ach, len);
-	hhDriver->achDest[len-1];
+	cch = (int)min(cb, sizeof(hhDriver->achDest) / sizeof(WCHAR));
+	lstrcpynW(hhDriver->achDest, ach, cch);
+	hhDriver->achDest[cch - 1] = L'\0';
 
 	return 0;
 	}
@@ -3064,11 +3246,11 @@ static int DoNewModemWizard(HWND hWnd, int iTimeout)
 		                {
 		                #if defined(_DEBUG)
 			                {
-			                char ach[100];
+			                WCHAR achDbg[100];
 			                DWORD dw = GetLastError();
 
-			                wsprintf(ach,"CreateProcess (%s, %d) : %x",__FILE__,__LINE__,dw);
-			                MessageBox(GetFocus(), ach, "Debug", MB_OK);
+			                wsprintfW(achDbg,L"CreateProcess (%S, %d) : %x",__FILE__,__LINE__,dw);
+			                MessageBoxW(GetFocus(), achDbg, L"Debug", MB_OK);
 			                }
 		                #endif
 

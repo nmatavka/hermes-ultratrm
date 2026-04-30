@@ -10,6 +10,8 @@
 #pragma hdrstop
 
 #include <commctrl.h>
+#include <stdlib.h>
+#include <wchar.h>
 #include <term/res.h>
 
 #include "globals.h"
@@ -213,7 +215,7 @@ VOID FAR PASCAL utilDrawBitmap(HWND hWnd, HDC hDC, HBITMAP hBitmap,
   SelectObject(hdcMem, hBitmap);
   SetMapMode(hdcMem, GetMapMode(hDC));
 
-  GetObject(hBitmap, sizeof(BITMAP), (LPWSTR)&bm);
+  GetObject(hBitmap, sizeof(BITMAP), &bm);
 
   // Convert device coordintes into logical coordinates.
   //
@@ -348,7 +350,7 @@ STATIC_FUNC void banner_WM_CREATE(HWND hwnd, LPCREATESTRUCT lpstCreate)
 				LR_CREATEDIBSECTION | LR_LOADTRANSPARENT | LR_LOADMAP3DCOLORS);
 	SetWindowLongPtr(hwnd, 0, (LONG_PTR)hBitmap);
 
-	GetObject(hBitmap, sizeof(BITMAP), (LPWSTR)&bm);
+	GetObject(hBitmap, sizeof(BITMAP), &bm);
 
 	SetRect(&rc, 0, 0, bm.bmWidth, bm.bmHeight);
 	AdjustWindowRect(&rc, BANNER_WINDOW_STYLE, FALSE);
@@ -373,8 +375,8 @@ STATIC_FUNC void banner_WM_CREATE(HWND hwnd, LPCREATESTRUCT lpstCreate)
     // Create the button, but don't put any text in it yet. We'll
     // do that after we change the font.
     //
-    hwndButton = CreateWindow("button",
-			      "",
+    hwndButton = CreateWindowW(L"button",
+			      L"",
 			      WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
 			      IDN_UPGRADE_BUTTON_X,
 			      IDN_UPGRADE_BUTTON_Y,
@@ -393,7 +395,7 @@ STATIC_FUNC void banner_WM_CREATE(HWND hwnd, LPCREATESTRUCT lpstCreate)
     if (LoadString(glblQueryDllHinst(), IDS_UPGRADE_FONT_SIZE,
 	    ach, sizeof(ach)/sizeof(WCHAR)))
 		{
-		nSize1 = atoi(ach);
+		nSize1 = (int)wcstol(ach, NULL, 10);
 		}
 	else
 		{
@@ -449,6 +451,7 @@ STATIC_FUNC void banner_WM_PAINT(HWND hwnd)
 	PAINTSTRUCT ps;
 	LOGFONT     lf;
 	HFONT       hFont;
+	WCHAR       achBuildDate[32];
 
 	hDC = BeginPaint(hwnd, &ps);
 	hBitmap = (HBITMAP)GetWindowLongPtr(hwnd, 0);
@@ -482,7 +485,8 @@ STATIC_FUNC void banner_WM_PAINT(HWND hwnd)
 #endif
 		lf.lfCharSet = ANSI_CHARSET;
 		//lf.lfWeight = FW_SEMIBOLD;
-		strcpy(lf.lfFaceName, "Arial");
+		lstrcpynW(lf.lfFaceName, L"Arial",
+				sizeof(lf.lfFaceName) / sizeof(lf.lfFaceName[0]));
 
 		hFont = CreateFontIndirect(&lf);
 
@@ -492,13 +496,20 @@ STATIC_FUNC void banner_WM_PAINT(HWND hwnd)
 			//SetBkColor(hDC, RGB(0,255,0));
 			SetBkMode( hDC, TRANSPARENT );
 #ifndef NT_EDITION
-			TextOut(hDC, 19, 230, "Build Date", 10);
-			TextOut(hDC, 19, 242, __DATE__, strlen(__DATE__));
-			TextOut(hDC, 225, 230, "Copyright 2001", 15);
-			TextOut(hDC, 225, 242, "Hilgraeve Inc.", 14);
+			MultiByteToWideChar(CP_ACP, 0, __DATE__, -1,
+					achBuildDate,
+					sizeof(achBuildDate) / sizeof(achBuildDate[0]));
+			TextOutW(hDC, 19, 230, L"Build Date", 10);
+			TextOutW(hDC, 19, 242, achBuildDate, lstrlenW(achBuildDate));
+			TextOutW(hDC, 225, 230, L"Copyright 2001", 14);
+			TextOutW(hDC, 225, 242, L"Hilgraeve Inc.", 14);
 #else
-			TextOut(hDC, 19, 260, "Copyright 2001 Microsoft Corporation.  All rights reserved.", 59);
-			TextOut(hDC, 19, 272, "Portions Copyright 1995-2001 Hilgraeve, Inc.  All Rights reserved.", 66);
+			TextOutW(hDC, 19, 260,
+					L"Copyright 2001 Microsoft Corporation.  All rights reserved.",
+					59);
+			TextOutW(hDC, 19, 272,
+					L"Portions Copyright 1995-2001 Hilgraeve, Inc.  All Rights reserved.",
+					66);
 #endif			
 			DeleteObject(SelectObject(hDC, hFont));
 			}
@@ -524,4 +535,3 @@ BOOL bannerUnregisterClass(HANDLE hInstance)
 	{
 	return UnregisterClass(BANNER_DISPLAY_CLASS, hInstance);
 	}
-

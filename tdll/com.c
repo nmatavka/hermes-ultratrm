@@ -270,8 +270,8 @@ int ComInitHdl(const HCOM pstCom)
 	// Normally, we would load the port type and port name values from the session file and set them,
 	// but since we inherit such things from TAPI, just call ComSetDeviceFromFile with a dummy
 	// name to get the proper initialization of the com driver.
-	ComSetDeviceFromFile((HCOM)pstCom, "comstd.dll");
-	ComSetPortName((HCOM)pstCom, "COM1");
+	ComSetDeviceFromFile((HCOM)pstCom, L"comstd.dll");
+	ComSetPortName((HCOM)pstCom, L"COM1");
 
 	return iRetVal;
 	}

@@ -11,6 +11,9 @@
 #pragma hdrstop
 
 #include <commctrl.h>
+#include <stdlib.h>
+#include <string.h>
+#include <wchar.h>
 
 #include <tdll/stdtyp.h>
 #include <tdll/tdll.h>
@@ -23,6 +26,7 @@
 #include <tdll/load_res.h>
 #include <tdll/ut_text.h>
 #include <tdll/hlptable.h>
+#include <tdll/term.h>
 
 #include "emu.h"
 #include "emuid.h"
@@ -53,6 +57,10 @@ STATIC_FUNC int emudlgValidateEntryFieldSetting(HWND hDlg,
 										int nIDC,
 										int nMinVal,
 										int nMaxVal);
+STATIC_FUNC void emudlgInitColorThemeCombo(HWND hDlg, PSTEMUSET pstEmuSettings);
+STATIC_FUNC int emudlgColorFromControlId(int nId, BOOL *pfText);
+STATIC_FUNC void emudlgUpdateColorPreview(HWND hDlg);
+STATIC_FUNC BOOL emudlgDrawColorButton(HWND hDlg, const DRAWITEMSTRUCT *pdis);
 #endif
 
 // Defines...
@@ -79,6 +87,14 @@ STATIC_FUNC int emudlgValidateEntryFieldSetting(HWND hDlg,
 #define IDC_TF_COLUMNS					133
 #define	IDC_NUMBER_OF_COLS				134
 #define	IDC_PRINT_RAW					135
+
+#if defined(INCL_TERMINAL_SIZE_AND_COLORS)
+typedef struct stColorDlg
+	{
+	PSTEMUSET pstEmuSettings;
+	HBRUSH hPreviewBrush;
+	} STCOLORDLG;
+#endif
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
  * FUNCTION:
@@ -209,6 +225,164 @@ BOOL emuSettingsDlg(const HSESSION hSession, const HWND hwndParent,
 
 	return fResult;
 	}
+
+#if defined(INCL_TERMINAL_SIZE_AND_COLORS)
+int emuColorSettingsDlg(const HSESSION hSession,
+					const HWND hwndParent, PSTEMUSET pstEmuSettings)
+	{
+	STEMUSET stWorkingSettings;
+	INT_PTR nResult;
+
+	(void)hSession;
+	if (pstEmuSettings == NULL)
+		return IDCANCEL;
+
+	memcpy(&stWorkingSettings, pstEmuSettings, sizeof(stWorkingSettings));
+	nResult = DoDialog(glblQueryDllHinst(),
+			MAKEINTRESOURCE(IDD_SCRN_COLOR_SETTINGS),
+			hwndParent,
+			(DLGPROC)emuColorSettingsDlgProc,
+			(LPARAM)&stWorkingSettings);
+
+	if (nResult == IDOK)
+		{
+		memcpy(pstEmuSettings, &stWorkingSettings, sizeof(*pstEmuSettings));
+		return IDOK;
+		}
+
+	return IDCANCEL;
+	}
+
+INT_PTR CALLBACK emuColorSettingsDlgProc(HWND hDlg, UINT wMsg,
+		WPARAM wPar, LPARAM lPar)
+	{
+	STCOLORDLG *pstDlg;
+	PSTEMUSET pstEmuSettings;
+	BOOL fText;
+	int nColor;
+	int nSel;
+	HBRUSH hBrush;
+	HWND hwndPreview;
+
+	pstDlg = (STCOLORDLG *)GetWindowLongPtr(hDlg, GWLP_USERDATA);
+
+	switch (wMsg)
+		{
+	case WM_INITDIALOG:
+		pstDlg = (STCOLORDLG *)calloc(1, sizeof(*pstDlg));
+		if (pstDlg == NULL)
+			{
+			EndDialog(hDlg, IDCANCEL);
+			return TRUE;
+			}
+
+		pstDlg->pstEmuSettings = (PSTEMUSET)lPar;
+		SetWindowLongPtr(hDlg, GWLP_USERDATA, (LONG_PTR)pstDlg);
+		mscCenterWindowOnWindow(hDlg, GetParent(hDlg));
+		emudlgInitColorThemeCombo(hDlg, pstDlg->pstEmuSettings);
+		emudlgUpdateColorPreview(hDlg);
+		return TRUE;
+
+	case WM_DESTROY:
+		if (pstDlg)
+			{
+			if (pstDlg->hPreviewBrush)
+				DeleteObject(pstDlg->hPreviewBrush);
+			free(pstDlg);
+			SetWindowLongPtr(hDlg, GWLP_USERDATA, 0);
+			}
+		return TRUE;
+
+	case WM_CTLCOLORSTATIC:
+		if (pstDlg && pstDlg->pstEmuSettings &&
+				(HWND)lPar == GetDlgItem(hDlg, IDC_TEXT_PREVIEW))
+			{
+			pstEmuSettings = pstDlg->pstEmuSettings;
+			SetTextColor((HDC)wPar, termColorThemeColor(
+					pstEmuSettings->nColorTheme,
+					pstEmuSettings->nTextColor));
+			SetBkColor((HDC)wPar, termColorThemeColor(
+					pstEmuSettings->nColorTheme,
+					pstEmuSettings->nBackgroundColor));
+			if (pstDlg->hPreviewBrush == NULL)
+				pstDlg->hPreviewBrush = CreateSolidBrush(
+						termColorThemeColor(pstEmuSettings->nColorTheme,
+								pstEmuSettings->nBackgroundColor));
+			return (INT_PTR)pstDlg->hPreviewBrush;
+			}
+		break;
+
+	case WM_DRAWITEM:
+		if (emudlgDrawColorButton(hDlg, (const DRAWITEMSTRUCT *)lPar))
+			return TRUE;
+		break;
+
+	case WM_COMMAND:
+		if (pstDlg == NULL || pstDlg->pstEmuSettings == NULL)
+			break;
+		pstEmuSettings = pstDlg->pstEmuSettings;
+
+		switch (LOWORD(wPar))
+			{
+		case IDC_COLOR_THEME_COMBO:
+			if (HIWORD(wPar) == CBN_SELCHANGE)
+				{
+				nSel = (int)SendDlgItemMessage(hDlg,
+						IDC_COLOR_THEME_COMBO, CB_GETCURSEL, 0, 0);
+				if (nSel != CB_ERR)
+					{
+					pstEmuSettings->nColorTheme =
+							(int)SendDlgItemMessage(hDlg,
+									IDC_COLOR_THEME_COMBO,
+									CB_GETITEMDATA, (WPARAM)nSel, 0);
+					pstEmuSettings->nTextColor =
+							termColorThemeDefaultText(
+									pstEmuSettings->nColorTheme);
+					pstEmuSettings->nBackgroundColor =
+							termColorThemeDefaultBackground(
+									pstEmuSettings->nColorTheme);
+					emudlgUpdateColorPreview(hDlg);
+					}
+				}
+			return TRUE;
+
+		case IDOK:
+			EndDialog(hDlg, IDOK);
+			return TRUE;
+
+		case IDCANCEL:
+			EndDialog(hDlg, IDCANCEL);
+			return TRUE;
+
+		default:
+			nColor = emudlgColorFromControlId(LOWORD(wPar), &fText);
+			if (nColor >= 0 && HIWORD(wPar) == BN_CLICKED)
+				{
+				if (fText)
+					pstEmuSettings->nTextColor = nColor;
+				else
+					pstEmuSettings->nBackgroundColor = nColor;
+				emudlgUpdateColorPreview(hDlg);
+				return TRUE;
+				}
+			break;
+			}
+		break;
+
+	default:
+		break;
+		}
+
+	hwndPreview = GetDlgItem(hDlg, IDC_TEXT_PREVIEW);
+	if (wMsg == WM_CTLCOLORSTATIC && hwndPreview == (HWND)lPar)
+		{
+		hBrush = GetSysColorBrush(COLOR_WINDOW);
+		return (INT_PTR)hBrush;
+		}
+
+	return FALSE;
+	}
+#endif
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
  * FUNCTION:
@@ -1396,6 +1570,151 @@ STATIC_FUNC BOOL emudlgFindCharSetName(HWND  hDlg,
 	}
 
 #if defined(INCL_TERMINAL_SIZE_AND_COLORS)
+STATIC_FUNC void emudlgInitColorThemeCombo(HWND hDlg,
+		PSTEMUSET pstEmuSettings)
+	{
+	int i;
+	int nIndex;
+	HWND hwndCombo;
+
+	hwndCombo = GetDlgItem(hDlg, IDC_COLOR_THEME_COMBO);
+	if (hwndCombo == 0 || pstEmuSettings == NULL)
+		return;
+
+	if (pstEmuSettings->nColorTheme < 0 ||
+			pstEmuSettings->nColorTheme >= EMU_COLOR_THEME_COUNT)
+		pstEmuSettings->nColorTheme = EMU_COLOR_THEME_SOLARIZED_LIGHT;
+
+	for (i = 0; i < EMU_COLOR_THEME_COUNT; ++i)
+		{
+		nIndex = (int)SendMessage(hwndCombo, CB_ADDSTRING, 0,
+				(LPARAM)termColorThemeName(i));
+		if (nIndex != CB_ERR)
+			{
+			SendMessage(hwndCombo, CB_SETITEMDATA, (WPARAM)nIndex, i);
+			if (i == pstEmuSettings->nColorTheme)
+				SendMessage(hwndCombo, CB_SETCURSEL, (WPARAM)nIndex, 0);
+			}
+		}
+	}
+
+STATIC_FUNC int emudlgColorFromControlId(int nId, BOOL *pfText)
+	{
+	typedef struct stColorControl
+		{
+		int nTextId;
+		int nBackId;
+		int nColor;
+		} STCOLORCONTROL;
+
+	static const STCOLORCONTROL astControls[] =
+		{
+		{ IDC_TEXT_BLACK,       IDC_BACK_BLACK,       VC_BLACK },
+		{ IDC_TEXT_DARKBLUE,    IDC_BACK_DARKBLUE,    VC_BLUE },
+		{ IDC_TEXT_DARKGREEN,   IDC_BACK_DARKGREEN,   VC_GREEN },
+		{ IDC_TEXT_DARKCYAN,    IDC_BACK_DARKCYAN,    VC_CYAN },
+		{ IDC_TEXT_DARKRED,     IDC_BACK_DARKRED,     VC_RED },
+		{ IDC_TEXT_DARKMAGENTA, IDC_BACK_DARKMAGENTA, VC_MAGENTA },
+		{ IDC_TEXT_DARKYELLOW,  IDC_BACK_DARKYELLOW,  VC_BROWN },
+		{ IDC_TEXT_LIGHTGRAY,   IDC_BACK_LIGHTGRAY,   VC_WHITE },
+		{ IDC_TEXT_DARKGRAY,    IDC_BACK_DARKGRAY,    VC_GRAY },
+		{ IDC_TEXT_BLUE,        IDC_BACK_BLUE,        VC_BRT_BLUE },
+		{ IDC_TEXT_GREEN,       IDC_BACK_GREEN,       VC_BRT_GREEN },
+		{ IDC_TEXT_CYAN,        IDC_BACK_CYAN,        VC_BRT_CYAN },
+		{ IDC_TEXT_RED,         IDC_BACK_RED,         VC_BRT_RED },
+		{ IDC_TEXT_MAGENTA,     IDC_BACK_MAGENTA,     VC_BRT_MAGENTA },
+		{ IDC_TEXT_YELLOW,      IDC_BACK_YELLOW,      VC_BRT_YELLOW },
+		{ IDC_TEXT_WHITE,       IDC_BACK_WHITE,       VC_BRT_WHITE }
+		};
+	int i;
+
+	for (i = 0; i < DIM(astControls); ++i)
+		{
+		if (nId == astControls[i].nTextId)
+			{
+			if (pfText)
+				*pfText = TRUE;
+			return astControls[i].nColor;
+			}
+		if (nId == astControls[i].nBackId)
+			{
+			if (pfText)
+				*pfText = FALSE;
+			return astControls[i].nColor;
+			}
+		}
+
+	return -1;
+	}
+
+STATIC_FUNC void emudlgUpdateColorPreview(HWND hDlg)
+	{
+	STCOLORDLG *pstDlg;
+
+	pstDlg = (STCOLORDLG *)GetWindowLongPtr(hDlg, GWLP_USERDATA);
+	if (pstDlg && pstDlg->hPreviewBrush)
+		{
+		DeleteObject(pstDlg->hPreviewBrush);
+		pstDlg->hPreviewBrush = NULL;
+		}
+
+	InvalidateRect(GetDlgItem(hDlg, IDC_TEXT_PREVIEW), NULL, TRUE);
+	InvalidateRect(GetDlgItem(hDlg, IDC_TEXT_BLACK), NULL, TRUE);
+	InvalidateRect(GetDlgItem(hDlg, IDC_BACK_BLACK), NULL, TRUE);
+	InvalidateRect(hDlg, NULL, FALSE);
+	}
+
+STATIC_FUNC BOOL emudlgDrawColorButton(HWND hDlg,
+		const DRAWITEMSTRUCT *pdis)
+	{
+	STCOLORDLG *pstDlg;
+	PSTEMUSET pstEmuSettings;
+	BOOL fText;
+	int nColor;
+	COLORREF cr;
+	HBRUSH hBrush;
+	RECT rc;
+	BOOL fSelected;
+
+	if (pdis == NULL)
+		return FALSE;
+
+	nColor = emudlgColorFromControlId((int)pdis->CtlID, &fText);
+	if (nColor < 0)
+		return FALSE;
+
+	pstDlg = (STCOLORDLG *)GetWindowLongPtr(hDlg, GWLP_USERDATA);
+	if (pstDlg == NULL || pstDlg->pstEmuSettings == NULL)
+		return FALSE;
+	pstEmuSettings = pstDlg->pstEmuSettings;
+
+	rc = pdis->rcItem;
+	cr = termColorThemeColor(pstEmuSettings->nColorTheme, nColor);
+	hBrush = CreateSolidBrush(cr);
+	if (hBrush)
+		{
+		FillRect(pdis->hDC, &rc, hBrush);
+		DeleteObject(hBrush);
+		}
+
+	fSelected = fText ?
+			(pstEmuSettings->nTextColor == nColor) :
+			(pstEmuSettings->nBackgroundColor == nColor);
+	if (fSelected)
+		{
+		InflateRect(&rc, -1, -1);
+		DrawEdge(pdis->hDC, &rc, EDGE_SUNKEN, BF_RECT);
+		}
+	else
+		{
+		DrawEdge(pdis->hDC, &rc, EDGE_RAISED, BF_RECT);
+		}
+
+	return TRUE;
+	}
+#endif
+
+#if defined(INCL_TERMINAL_SIZE_AND_COLORS)
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
  * FUNCTION:
  *  emudlgInitRowsCols
@@ -1572,7 +1891,7 @@ STATIC_FUNC int emudlgValidateEntryFieldSetting(HWND hDlg,
 	WCHAR_Fill(achStrEntered, L'\0', sizeof(achStrEntered) / sizeof(WCHAR));
 	GetDlgItemText(hDlg, nIDC, achStrEntered, sizeof(achStrEntered));
 
-	nNewValue = nValue = atoi(achStrEntered);
+	nNewValue = nValue = (int)wcstol(achStrEntered, NULL, 10);
 	if (nValue > nMaxVal)
 		nNewValue = nMaxVal;
 	else if (nValue < nMinVal)

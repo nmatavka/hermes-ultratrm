@@ -40,6 +40,7 @@
 #define WM_HT_QUERYOPENFILE WM_USER+0x107	// lPar=global atom
 #define WM_SESS_SHOW_SIDEBAR WM_USER+0x108	// mrw,4/13/95
 #define WM_ERROR_MSG        WM_USER+0x109   // jmh,3/25/96
+#define WM_REXXHAPI_CALL    WM_USER+0x10A   // lPar=session-thread call block
 
 enum _emuNotify
 	{

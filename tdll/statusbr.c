@@ -143,7 +143,7 @@ STATIC_FUNC void sbrSubclassStatusbarWindow(HWND hwnd, HSESSION hSession)
 	ATOM atom = (ATOM)0;
 	pSBR pSBRData;
 
-	atom = AddAtom((LPCWSTR)SBR_ATOM_NAME);
+	atom = AddAtom(SBR_ATOM_NAME);
 
 	if (atom == 0)
 		{
@@ -177,7 +177,7 @@ STATIC_FUNC void sbrSubclassStatusbarWindow(HWND hwnd, HSESSION hSession)
 	pSBRData->wpOrigStatusbarWndProc =
 		(WNDPROC)SetWindowLongPtr(hwnd, GWLP_WNDPROC, (LONG_PTR)sbrWndProc);
 
-	SetProp(hwnd, (LPCWSTR)atom, (HANDLE)pSBRData);
+	SetProp(hwnd, MAKEINTATOM(atom), (HANDLE)pSBRData);
 	}
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -201,8 +201,8 @@ LRESULT APIENTRY sbrWndProc(HWND hwnd, UINT uMsg, WPARAM wPar, LPARAM lPar)
 	int		nRet;
     LRESULT lpResult = 0;
 
-	atom = FindAtom((LPCWSTR)SBR_ATOM_NAME);
-	pSBRData = (pSBR)GetProp(hwnd, (LPCWSTR)atom);
+	atom = FindAtom(SBR_ATOM_NAME);
+	pSBRData = (pSBR)GetProp(hwnd, MAKEINTATOM(atom));
 
     if (pSBRData != NULL && IsWindow(hwnd))
         {
@@ -233,7 +233,7 @@ LRESULT APIENTRY sbrWndProc(HWND hwnd, UINT uMsg, WPARAM wPar, LPARAM lPar)
 		    case WM_DESTROY:
 			    if (atom)
 				    {
-				    RemoveProp(hwnd, (LPCWSTR)atom);
+				    RemoveProp(hwnd, MAKEINTATOM(atom));
 				    DeleteAtom(atom);
                     atom = (ATOM)0;
 				    }
@@ -348,7 +348,7 @@ STATIC_FUNC void sbrSetToNoParts(const HWND hwnd, LPWSTR pszStr)
  */
 STATIC_FUNC void sbrRefresh(const HWND hwnd, const int iPart, const pSBR pSBRData)
 	{
-	if (FindAtom((LPCWSTR)SBR_ATOM_NAME) != 0 && pSBRData != NULL &&
+	if (FindAtom(SBR_ATOM_NAME) != 0 && pSBRData != NULL &&
         IsWindow(hwnd))
         {
 	    // Make sure we are displaying the correct # of parts
@@ -434,7 +434,7 @@ STATIC_FUNC BOOL sbrNeedToSetParts(const HWND hwnd)
 	{
     BOOL bRet = FALSE;
 
-	if (FindAtom((LPCWSTR)SBR_ATOM_NAME) != 0 && IsWindow(hwnd))
+	if (FindAtom(SBR_ATOM_NAME) != 0 && IsWindow(hwnd))
         {
 	    int nParts = 0;
 	    int aWidths[SBR_MAX_PARTS+1];
@@ -469,7 +469,7 @@ STATIC_FUNC BOOL sbrNeedToSetParts(const HWND hwnd)
  */
 STATIC_FUNC void sbrSetParts(const HWND hwnd, const pSBR pSBRData)
 	{
-	if (FindAtom((LPCWSTR)SBR_ATOM_NAME) != 0 && pSBRData != NULL &&
+	if (FindAtom(SBR_ATOM_NAME) != 0 && pSBRData != NULL &&
         IsWindow(hwnd))
         {
 	    SendMessage(hwnd, SB_SETPARTS, (WPARAM)SBR_MAX_PARTS,
@@ -497,7 +497,7 @@ STATIC_FUNC void sbrSetParts(const HWND hwnd, const pSBR pSBRData)
  */
 STATIC_FUNC void sbrSetPartsOnce(const HWND hwnd, const pSBR pSBRData)
 	{
-	if (FindAtom((LPCWSTR)SBR_ATOM_NAME) != 0 && pSBRData != NULL &&
+	if (FindAtom(SBR_ATOM_NAME) != 0 && pSBRData != NULL &&
         IsWindow(hwnd))
         {
 	    int 		 aWidths[SBR_MAX_PARTS] = {1, 1, 1, 1, 1, 1, 1, 1};
@@ -584,7 +584,7 @@ STATIC_FUNC void sbrSetPartsOnce(const HWND hwnd, const pSBR pSBRData)
  */
 STATIC_FUNC void sbrCachString(pSBR pSBRData, unsigned int iPart, LPWSTR pach)
 	{
-	if (FindAtom((LPCWSTR)SBR_ATOM_NAME) != 0 && pSBRData != NULL)
+	if (FindAtom(SBR_ATOM_NAME) != 0 && pSBRData != NULL)
         {
 	    switch (iPart)
 		    {
@@ -816,7 +816,7 @@ STATIC_FUNC int sbrCalcPartSize(const HWND hwnd, const int iId)
  */
 STATIC_FUNC void sbrTimerRefresh(const HWND hwnd, const pSBR pSBRData)
 	{
-	if (FindAtom((LPCWSTR)SBR_ATOM_NAME) != 0 && pSBRData != NULL &&
+	if (FindAtom(SBR_ATOM_NAME) != 0 && pSBRData != NULL &&
         IsWindow(hwnd))
         {
 	    WCHAR		ach[256], achFormat[256];
@@ -898,7 +898,7 @@ STATIC_FUNC void sbrTimerRefresh(const HWND hwnd, const pSBR pSBRData)
 STATIC_FUNC BOOL sbrCnctTimeToSystemTime(const HWND hwnd,
 					LPSYSTEMTIME lpSysTime, const pSBR pSBRData)
 	{
-	if (FindAtom((LPCWSTR)SBR_ATOM_NAME) != 0 && pSBRData != NULL &&
+	if (FindAtom(SBR_ATOM_NAME) != 0 && pSBRData != NULL &&
         IsWindow(hwnd))
         {
 	    HCNCT		hCnct = (HCNCT)0;
@@ -954,7 +954,7 @@ STATIC_FUNC BOOL sbrCnctTimeToSystemTime(const HWND hwnd,
  */
 STATIC_FUNC void sbrCnctStatus(const HWND hwnd, const pSBR pSBRData)
 	{
-	if (FindAtom((LPCWSTR)SBR_ATOM_NAME) != 0 && pSBRData != NULL &&
+	if (FindAtom(SBR_ATOM_NAME) != 0 && pSBRData != NULL &&
         IsWindow(hwnd))
         {
         int		iRet = -1;
@@ -991,7 +991,7 @@ STATIC_FUNC void sbrCnctStatus(const HWND hwnd, const pSBR pSBRData)
 STATIC_FUNC void sbrDrawCnctPart(const HWND hwnd, const int iCnctStatus,
 									LPWSTR pszStr)
 	{
-	if (FindAtom((LPCWSTR)SBR_ATOM_NAME) != 0 && IsWindow(hwnd))
+	if (FindAtom(SBR_ATOM_NAME) != 0 && IsWindow(hwnd))
         {
 	    WCHAR	ach[100];
 	    UINT	iResId;
@@ -1057,7 +1057,7 @@ STATIC_FUNC void sbrDrawCnctPart(const HWND hwnd, const int iCnctStatus,
  */
 STATIC_FUNC void sbrEmulatorName(const HWND hwnd, const pSBR pSBRData)
 	{
-	if (FindAtom((LPCWSTR)SBR_ATOM_NAME) != 0 && pSBRData != NULL &&
+	if (FindAtom(SBR_ATOM_NAME) != 0 && pSBRData != NULL &&
         IsWindow(hwnd))
         {
 	    WCHAR	ach[100];
@@ -1093,7 +1093,7 @@ STATIC_FUNC void sbrEmulatorName(const HWND hwnd, const pSBR pSBRData)
  */
 STATIC_FUNC void sbrCom(const HWND hwnd, const pSBR pSBRData)
 	{
-	if (FindAtom((LPCWSTR)SBR_ATOM_NAME) != 0 && pSBRData != NULL &&
+	if (FindAtom(SBR_ATOM_NAME) != 0 && pSBRData != NULL &&
         IsWindow(hwnd))
         {
 	    WCHAR ach[100];
@@ -1124,7 +1124,7 @@ STATIC_FUNC void sbrCom(const HWND hwnd, const pSBR pSBRData)
  */
 STATIC_FUNC void sbrScrolLock(const HWND hwnd, const pSBR pSBRData)
 	{
-	if (FindAtom((LPCWSTR)SBR_ATOM_NAME) != 0 && pSBRData != NULL &&
+	if (FindAtom(SBR_ATOM_NAME) != 0 && pSBRData != NULL &&
         IsWindow(hwnd))
         {
 	    int		iScrl = 0, nFlag = 0;
@@ -1155,7 +1155,7 @@ STATIC_FUNC void sbrScrolLock(const HWND hwnd, const pSBR pSBRData)
  */
 STATIC_FUNC void sbrCapsLock(const HWND hwnd, const pSBR pSBRData)
 	{
-	if (FindAtom((LPCWSTR)SBR_ATOM_NAME) != 0 && pSBRData != NULL &&
+	if (FindAtom(SBR_ATOM_NAME) != 0 && pSBRData != NULL &&
         IsWindow(hwnd))
         {
 	    int		iCap = 0, nFlag = 0;
@@ -1186,7 +1186,7 @@ STATIC_FUNC void sbrCapsLock(const HWND hwnd, const pSBR pSBRData)
  */
 STATIC_FUNC void sbrNumLock(const HWND hwnd, const pSBR pSBRData)
 	{
-	if (FindAtom((LPCWSTR)SBR_ATOM_NAME) != 0 && pSBRData != NULL &&
+	if (FindAtom(SBR_ATOM_NAME) != 0 && pSBRData != NULL &&
         IsWindow(hwnd))
         {
 	    int		iNum = 0, nFlag = 0;
@@ -1217,7 +1217,7 @@ STATIC_FUNC void sbrNumLock(const HWND hwnd, const pSBR pSBRData)
  */
 STATIC_FUNC void sbrCapture(const HWND hwnd, const pSBR pSBRData)
 	{
-	if (FindAtom((LPCWSTR)SBR_ATOM_NAME) != 0 && pSBRData != NULL &&
+	if (FindAtom(SBR_ATOM_NAME) != 0 && pSBRData != NULL &&
         IsWindow(hwnd))
         {
 	    HCAPTUREFILE	hCapt;
@@ -1253,7 +1253,7 @@ STATIC_FUNC void sbrCapture(const HWND hwnd, const pSBR pSBRData)
  */
 STATIC_FUNC void sbrPrintEcho(const HWND hwnd, const pSBR pSBRData)
 	{
-	if (FindAtom((LPCWSTR)SBR_ATOM_NAME) != 0 && pSBRData != NULL &&
+	if (FindAtom(SBR_ATOM_NAME) != 0 && pSBRData != NULL &&
         IsWindow(hwnd))
         {
 	    WCHAR	ach[50];
@@ -1294,7 +1294,7 @@ STATIC_FUNC BOOL sbrCreateTimer(const HWND hwnd, const pSBR pSBRData)
 	int  nRet;
     BOOL bRet = FALSE;
 
-	if (FindAtom((LPCWSTR)SBR_ATOM_NAME) != 0 && pSBRData != NULL &&
+	if (FindAtom(SBR_ATOM_NAME) != 0 && pSBRData != NULL &&
         IsWindow(hwnd))
         {
 	    nRet = TimerCreate(sessQueryTimerMux(pSBRData->hSession),

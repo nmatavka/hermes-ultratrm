@@ -11,6 +11,8 @@
 #pragma hdrstop
 
 #include <string.h>
+#include <stdlib.h>
+#include <wchar.h>
 #include "stdtyp.h"
 #include <term/res.h>
 #include "tdll.h"
@@ -26,28 +28,142 @@
 #include "term.h"
 #include "term.hh"
 
-// This structure never referenced directly.  Instead, a pointer is
-// stored to this array.  Was easier to initialize by being static.
-
-static const COLORREF crEmuColors[MAX_EMUCOLORS] =
+typedef struct stTermColorTheme
 	{
-	RGB(  0,   0,	0), 			// black
-	RGB(  0,   0, 128),             // blue
-	RGB(  0, 128,   0),             // green
-	RGB(  0, 128, 128),             // cyan
-	RGB(128,   0,   0),             // red
-	RGB(128,   0, 128),             // magenta
-	RGB(128, 128,  32),             // yellow
-	RGB(192, 192, 192),             // white (lt gray)
-	RGB(128, 128, 128),             // black (gray)
-	RGB(  0,   0, 255),             // intense blue
-	RGB(  0, 255,   0),             // intense green
-	RGB(  0, 255, 255),             // intense cyan
-	RGB(255,   0,   0),             // intense red
-	RGB(255,   0, 255),             // intense magenta
-	RGB(255, 255,   0),             // intense yellow
-	RGB(255, 255, 255)				// intense white
+	int nTheme;
+	const WCHAR *pszName;
+	int nDefaultText;
+	int nDefaultBackground;
+	COLORREF acrColors[MAX_EMUCOLORS];
+	} STTERMCOLORTHEME;
+
+static const STTERMCOLORTHEME astTermColorThemes[] =
+	{
+		{
+		EMU_COLOR_THEME_SOLARIZED_LIGHT,
+		L"Solarized Light",
+		VC_BRT_CYAN,
+		VC_BRT_WHITE,
+			{
+			RGB(0x07, 0x36, 0x42), RGB(0xdc, 0x32, 0x2f),
+			RGB(0x85, 0x99, 0x00), RGB(0xb5, 0x89, 0x00),
+			RGB(0x26, 0x8b, 0xd2), RGB(0xd3, 0x36, 0x82),
+			RGB(0x2a, 0xa1, 0x98), RGB(0xee, 0xe8, 0xd5),
+			RGB(0x00, 0x2b, 0x36), RGB(0xcb, 0x4b, 0x16),
+			RGB(0x58, 0x6e, 0x75), RGB(0x65, 0x7b, 0x83),
+			RGB(0x83, 0x94, 0x96), RGB(0x6c, 0x71, 0xc4),
+			RGB(0x93, 0xa1, 0xa1), RGB(0xfd, 0xf6, 0xe3)
+			}
+		},
+		{
+		EMU_COLOR_THEME_SOLARIZED_DARK,
+		L"Solarized Dark",
+		VC_BRT_BLUE,
+		VC_GRAY,
+			{
+			RGB(0x07, 0x36, 0x42), RGB(0xdc, 0x32, 0x2f),
+			RGB(0x85, 0x99, 0x00), RGB(0xb5, 0x89, 0x00),
+			RGB(0x26, 0x8b, 0xd2), RGB(0xd3, 0x36, 0x82),
+			RGB(0x2a, 0xa1, 0x98), RGB(0xee, 0xe8, 0xd5),
+			RGB(0x00, 0x2b, 0x36), RGB(0xcb, 0x4b, 0x16),
+			RGB(0x58, 0x6e, 0x75), RGB(0x65, 0x7b, 0x83),
+			RGB(0x83, 0x94, 0x96), RGB(0x6c, 0x71, 0xc4),
+			RGB(0x93, 0xa1, 0xa1), RGB(0xfd, 0xf6, 0xe3)
+			}
+		},
+		{
+		EMU_COLOR_THEME_SELENIZED_LIGHT,
+		L"Selenized Light",
+		VC_BRT_CYAN,
+		VC_BRT_WHITE,
+			{
+			RGB(0x53, 0x67, 0x6d), RGB(0xd2, 0x21, 0x2d),
+			RGB(0x48, 0x91, 0x00), RGB(0xad, 0x89, 0x00),
+			RGB(0x00, 0x72, 0xd4), RGB(0xca, 0x48, 0x98),
+			RGB(0x00, 0x9c, 0x8f), RGB(0xec, 0xe3, 0xcc),
+			RGB(0x3a, 0x4d, 0x53), RGB(0xc2, 0x5d, 0x1e),
+			RGB(0x90, 0x99, 0x95), RGB(0x53, 0x67, 0x6d),
+			RGB(0x00, 0x6d, 0xce), RGB(0x87, 0x62, 0xc6),
+			RGB(0xd5, 0xcd, 0xb6), RGB(0xfb, 0xf3, 0xdb)
+			}
+		},
+		{
+		EMU_COLOR_THEME_SELENIZED_DARK,
+		L"Selenized Dark",
+		VC_BRT_CYAN,
+		VC_BLACK,
+			{
+			RGB(0x10, 0x3c, 0x48), RGB(0xfa, 0x57, 0x50),
+			RGB(0x75, 0xb9, 0x38), RGB(0xdb, 0xb3, 0x2d),
+			RGB(0x46, 0x95, 0xf7), RGB(0xf2, 0x75, 0xbe),
+			RGB(0x41, 0xc7, 0xb9), RGB(0xad, 0xbc, 0xbc),
+			RGB(0x18, 0x49, 0x56), RGB(0xed, 0x86, 0x49),
+			RGB(0x84, 0xc7, 0x47), RGB(0xeb, 0xc1, 0x3d),
+			RGB(0x58, 0xa3, 0xff), RGB(0xaf, 0x88, 0xeb),
+			RGB(0x53, 0xd6, 0xc7), RGB(0xca, 0xd8, 0xd9)
+			}
+		},
+		{
+		EMU_COLOR_THEME_SELENIZED_BLACK,
+		L"Selenized Black",
+		VC_BRT_CYAN,
+		VC_BLACK,
+			{
+			RGB(0x18, 0x18, 0x18), RGB(0xed, 0x4a, 0x46),
+			RGB(0x70, 0xb4, 0x33), RGB(0xdb, 0xb3, 0x2d),
+			RGB(0x36, 0x8a, 0xeb), RGB(0xeb, 0x6e, 0xb7),
+			RGB(0x3f, 0xc5, 0xb7), RGB(0xb9, 0xb9, 0xb9),
+			RGB(0x25, 0x25, 0x25), RGB(0xe6, 0x7f, 0x43),
+			RGB(0x83, 0xc7, 0x46), RGB(0xef, 0xc5, 0x41),
+			RGB(0x4f, 0x9c, 0xfe), RGB(0xa5, 0x80, 0xe2),
+			RGB(0x56, 0xd8, 0xc9), RGB(0xde, 0xde, 0xde)
+			}
+		},
+		{
+		EMU_COLOR_THEME_SELENIZED_WHITE,
+		L"Selenized White",
+		VC_BRT_CYAN,
+		VC_BRT_WHITE,
+			{
+			RGB(0x47, 0x47, 0x47), RGB(0xd6, 0x00, 0x0c),
+			RGB(0x1d, 0x97, 0x00), RGB(0xc4, 0x97, 0x00),
+			RGB(0x00, 0x64, 0xe4), RGB(0xdd, 0x0f, 0x9d),
+			RGB(0x00, 0xad, 0x9c), RGB(0xeb, 0xeb, 0xeb),
+			RGB(0x28, 0x28, 0x28), RGB(0xd0, 0x4a, 0x00),
+			RGB(0x87, 0x87, 0x87), RGB(0x47, 0x47, 0x47),
+			RGB(0x00, 0x54, 0xcf), RGB(0x7f, 0x51, 0xd6),
+			RGB(0xcd, 0xcd, 0xcd), RGB(0xff, 0xff, 0xff)
+			}
+		},
+		{
+		EMU_COLOR_THEME_WINDOWS,
+		L"Windows Classic",
+		VC_WHITE,
+		VC_BLACK,
+			{
+			RGB(  0,   0,	0), RGB(  0,   0, 128),
+			RGB(  0, 128,   0), RGB(  0, 128, 128),
+			RGB(128,   0,   0), RGB(128,   0, 128),
+			RGB(128, 128,  32), RGB(192, 192, 192),
+			RGB(128, 128, 128), RGB(  0,   0, 255),
+			RGB(  0, 255,   0), RGB(  0, 255, 255),
+			RGB(255,   0,   0), RGB(255,   0, 255),
+			RGB(255, 255,   0), RGB(255, 255, 255)
+			}
+		}
 	};
+
+static const STTERMCOLORTHEME *termFindColorTheme(int nTheme)
+	{
+	int i;
+
+	for (i = 0; i < DIM(astTermColorThemes); ++i)
+		{
+		if (astTermColorThemes[i].nTheme == nTheme)
+			return &astTermColorThemes[i];
+		}
+	return &astTermColorThemes[0];
+	}
 
 static BOOL AllocTxtBuf(ECHAR ***fpalpstr, int const sRows, int const sCols);
 static BOOL AllocAttrBuf(PSTATTR **fpapst, const int sRows, const int sCols);
@@ -178,7 +294,8 @@ HHTERM CreateTerminalHdl(const HWND hwndTerm)
 	hhTerm->iRows = 24; 	// standard, loading an emulator could change it.
 	hhTerm->iCols = 80; 	// standard, loading an emulator could change it.
 
-	hhTerm->pacrEmuColors = crEmuColors;
+	hhTerm->iColorTheme = EMU_COLOR_THEME_SOLARIZED_LIGHT;
+	hhTerm->pacrEmuColors = termFindColorTheme(hhTerm->iColorTheme)->acrColors;
 	hhTerm->xBezel = BEZEL_SIZE;
 	hhTerm->xIndent = 3;
 	hhTerm->fCursorTracking = TRUE;
@@ -692,7 +809,7 @@ BOOL termSetFont(const HHTERM hhTerm, const PLOGFONT plf)
         if (LoadString(glblQueryDllHinst(), IDS_TERM_DEF_VGA_SIZE,
                 ach, sizeof(ach) / sizeof(WCHAR)))
             {
-            nSize1 = atoi(ach);
+            nSize1 = (int)wcstol(ach, NULL, 10);
             }
 		else
             {
@@ -702,7 +819,7 @@ BOOL termSetFont(const HHTERM hhTerm, const PLOGFONT plf)
         if (LoadString(glblQueryDllHinst(), IDS_TERM_DEF_NONVGA_SIZE,
                 ach, sizeof(ach) / sizeof(WCHAR)))
             {
-            nSize2 = atoi(ach);
+            nSize2 = (int)wcstol(ach, NULL, 10);
             }
 
 		else
@@ -724,14 +841,15 @@ BOOL termSetFont(const HHTERM hhTerm, const PLOGFONT plf)
         if (LoadString(glblQueryDllHinst(), IDS_TERM_DEF_FONT,
                 ach, sizeof(ach) / sizeof(WCHAR)))
             {
-            strncpy(lf.lfFaceName, ach, sizeof(lf.lfFaceName));
+            lstrcpynW(lf.lfFaceName, ach,
+                    sizeof(lf.lfFaceName) / sizeof(WCHAR));
             lf.lfFaceName[sizeof(lf.lfFaceName)/sizeof(WCHAR)-1] = L'\0';
             }
 
         if (LoadString(glblQueryDllHinst(), IDS_TERM_DEF_CHARSET,
                 ach, sizeof(ach) / sizeof(WCHAR)))
             {
-            nCharSet = atoi(ach);
+            nCharSet = (int)wcstol(ach, NULL, 10);
 			lf.lfCharSet = (BYTE)nCharSet;
             }
 
@@ -1020,6 +1138,38 @@ static void termFreeBkBuf(const HHTERM hhTerm)
 	return;
 	}
 
+const WCHAR *termColorThemeName(int nTheme)
+	{
+	return termFindColorTheme(nTheme)->pszName;
+	}
+
+int termColorThemeDefaultText(int nTheme)
+	{
+	return termFindColorTheme(nTheme)->nDefaultText;
+	}
+
+int termColorThemeDefaultBackground(int nTheme)
+	{
+	return termFindColorTheme(nTheme)->nDefaultBackground;
+	}
+
+COLORREF termColorThemeColor(int nTheme, int nColor)
+	{
+	if (nColor < 0 || nColor >= MAX_EMUCOLORS)
+		nColor = 0;
+	return termFindColorTheme(nTheme)->acrColors[nColor];
+	}
+
+void termApplyColorTheme(const HHTERM hhTerm, int nTheme)
+	{
+	if (hhTerm == 0)
+		return;
+
+	hhTerm->iColorTheme = termFindColorTheme(nTheme)->nTheme;
+	hhTerm->pacrEmuColors = termFindColorTheme(hhTerm->iColorTheme)->acrColors;
+	termSetClrAttr(hhTerm);
+	}
+
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
  * FUNCTION:
  *	GetNearestColorIndex
@@ -1055,11 +1205,13 @@ int GetNearestColorIndex(COLORREF cr)
 	unsigned int  R, G, B;
 	unsigned long C, CMin = (unsigned long)-1;
 
-	for (i = 0 ; i < DIM(crEmuColors) ; ++i)
+	for (i = 0 ; i < MAX_EMUCOLORS ; ++i)
 		{
-		R = GetRValue(crEmuColors[i]) - GetRValue(cr);	R *= R;
-		G = GetGValue(crEmuColors[i]) - GetGValue(cr);	G *= G;
-		B = GetBValue(crEmuColors[i]) - GetBValue(cr);	B *= B;
+		const COLORREF crTheme =
+				termFindColorTheme(EMU_COLOR_THEME_SOLARIZED_LIGHT)->acrColors[i];
+		R = GetRValue(crTheme) - GetRValue(cr);	R *= R;
+		G = GetGValue(crTheme) - GetGValue(cr);	G *= G;
+		B = GetBValue(crTheme) - GetBValue(cr);	B *= B;
 
 		C = (ULONG)(R + G + B);
 

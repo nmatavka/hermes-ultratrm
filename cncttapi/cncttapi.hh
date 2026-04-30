@@ -98,6 +98,7 @@ struct stCnctDrvPrivate
     int      iRedialSecsRemaining; // seconds remaining to redial
 
 	int		 iPort;
+	int      nTcpTlsMode;
 
 	WCHAR	 achDestAddr[MAX_IP_ADDR_LEN];
 
@@ -163,7 +164,7 @@ int EnumerateTapiLocations(const HHDRIVER hhDriver, const HWND hwndCB,
 								  const HWND hwndTB);
 
 int CheckHotPhone(const HHDRIVER hhDriver, const DWORD dwLine, int *pfHotPhone);
-DWORD tapiTrap(const DWORD dw, const WCHAR *file, const int line);
+DWORD tapiTrap(const DWORD dw, const char *file, const int line);
 void ResetComboBox(const HWND hwnd);
 void EnableDialNow(const HWND hwndDlg, const int fEnable);
 int fCountryUsesAreaCode(const DWORD dwCountryId, const DWORD dwAPIVersion);
@@ -196,4 +197,3 @@ int WINAPI cnctdrvComEvent(const HHDRIVER hhDriver, const enum COM_EVENTS event)
 
 int cnctdrvGetComSettingsString(const HHDRIVER hhDriver, LPWSTR pachStr,
 								const size_t cb);
-

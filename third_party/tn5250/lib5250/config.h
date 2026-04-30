@@ -1,6 +1,6 @@
-/* UltraTerminal build configuration for the embedded tn5250 runtime. */
-#ifndef ULTRATERMINAL_TN5250_CONFIG_H
-#define ULTRATERMINAL_TN5250_CONFIG_H
+/* UltraTerminal build configuration for the embedded IBM 5250 runtime. */
+#ifndef ULTRATERMINAL_IBM5250_CONFIG_H
+#define ULTRATERMINAL_IBM5250_CONFIG_H
 
 #ifndef VERSION
 #define VERSION "0.19.0-ultraterminal"
@@ -23,7 +23,7 @@
 #define HAVE_FCNTL_H 1
 #endif
 
-#if defined(ULTRATERMINAL_TN5250_HAVE_OPENSSL)
+#if defined(ULTRATERMINAL_IBM5250_HAVE_OPENSSL)
 #define HAVE_LIBSSL 1
 #define HAVE_LIBCRYPTO 1
 #endif

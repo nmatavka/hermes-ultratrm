@@ -166,12 +166,12 @@ INT InitializeFilesDirsHdl(const HSESSION hSession, HFILES hFile)
 			GetCurrentDirectory(FNAME_LEN, acDir);
 			}
 
-		nSize = StrCharGetByteCount(acDir) + 1;
+		nSize = StrCharGetByteCount(acDir) + (int)sizeof(WCHAR);
 
-		pszSname = malloc(nSize);
+		pszSname = malloc((size_t)nSize);
 		if (pszSname == (LPWSTR)0)
 			goto IFDexit;
-		pszRname = malloc(nSize);
+		pszRname = malloc((size_t)nSize);
 		if (pszRname == (LPWSTR)0)
 			goto IFDexit;
 
@@ -181,7 +181,7 @@ INT InitializeFilesDirsHdl(const HSESSION hSession, HFILES hFile)
 			pFD->pszInternalSendDirectory = NULL;
 			}
 		pFD->pszInternalSendDirectory = pszSname;
-		StrCharCopyN(pFD->pszInternalSendDirectory, acDir, nSize);
+		StrCharCopy(pFD->pszInternalSendDirectory, acDir);
 
 		if (pFD->pszTransferSendDirectory)
             {
@@ -195,7 +195,7 @@ INT InitializeFilesDirsHdl(const HSESSION hSession, HFILES hFile)
 			pFD->pszInternalRecvDirectory = NULL;
 			}
 		pFD->pszInternalRecvDirectory = pszRname;
-		StrCharCopyN(pFD->pszInternalRecvDirectory, acDir, nSize);
+		StrCharCopy(pFD->pszInternalRecvDirectory, acDir);
 
 		if (pFD->pszTransferRecvDirectory)
             {
@@ -239,7 +239,7 @@ INT LoadFilesDirsHdl(HFILES hFile)
 	{
 	INT nRet = 0;
 	FD_DATA *pFD;
-	long lSize;
+	unsigned long lSize;
 	LPWSTR pszStr;
 
 	pFD = (FD_DATA *)hFile;
@@ -258,9 +258,11 @@ INT LoadFilesDirsHdl(HFILES hFile)
 						NULL);
 		if (lSize != 0)
 			{
-			pszStr = (LPWSTR)malloc(lSize);
+			pszStr = (LPWSTR)malloc((size_t)lSize + sizeof(WCHAR));
 			if (pszStr)
 				{
+				WCHAR_Fill(pszStr, L'\0',
+					((size_t)lSize + sizeof(WCHAR)) / sizeof(WCHAR));
 				sfGetSessionItem(sessQuerySysFileHdl(pFD->hSession),
 								SFID_XFR_SEND_DIR,
 								&lSize,
@@ -288,9 +290,11 @@ INT LoadFilesDirsHdl(HFILES hFile)
 						NULL);
 		if (lSize != 0)
 			{
-			pszStr = (LPWSTR)malloc(lSize);
+			pszStr = (LPWSTR)malloc((size_t)lSize + sizeof(WCHAR));
 			if (pszStr)
 				{
+				WCHAR_Fill(pszStr, L'\0',
+					((size_t)lSize + sizeof(WCHAR)) / sizeof(WCHAR));
 				sfGetSessionItem(sessQuerySysFileHdl(pFD->hSession),
 								SFID_XFR_RECV_DIR,
 								&lSize,
@@ -378,7 +382,7 @@ INT DestroyFilesDirsHdl(const HFILES hFile)
 INT SaveFilesDirsHdl(const HFILES hFile)
 	{
 	FD_DATA *pFD;
-	long lSize;
+	unsigned long lSize;
 
 	pFD = (FD_DATA *)hFile;
 	assert(pFD);
@@ -387,7 +391,8 @@ INT SaveFilesDirsHdl(const HFILES hFile)
 
 	if (pFD->pszTransferSendDirectory)
 		{
-		lSize = StrCharGetByteCount(pFD->pszTransferSendDirectory) + 1;
+		lSize = (unsigned long)StrCharGetByteCount(pFD->pszTransferSendDirectory) +
+			sizeof(WCHAR);
 		sfPutSessionItem(sessQuerySysFileHdl(pFD->hSession),
 						SFID_XFR_SEND_DIR,
 						lSize,
@@ -396,7 +401,8 @@ INT SaveFilesDirsHdl(const HFILES hFile)
 
 	if (pFD->pszTransferRecvDirectory)
 		{
-		lSize = StrCharGetByteCount(pFD->pszTransferRecvDirectory) + 1;
+		lSize = (unsigned long)StrCharGetByteCount(pFD->pszTransferRecvDirectory) +
+			sizeof(WCHAR);
 		sfPutSessionItem(sessQuerySysFileHdl(pFD->hSession),
 						SFID_XFR_RECV_DIR,
 						lSize,
@@ -495,7 +501,7 @@ VOID filesSetSendDirectory(HFILES hFile, LPCWSTR pszDir)
 	pFD = (FD_DATA *)hFile;
 	assert(pFD);
 
-	pszTmp = (LPWSTR)malloc(StrCharGetByteCount(pszDir) + 1);
+	pszTmp = (LPWSTR)malloc((size_t)StrCharGetByteCount(pszDir) + sizeof(WCHAR));
 	assert(pszTmp);
 	if (pszTmp == NULL)
 		return;
@@ -532,7 +538,7 @@ VOID filesSetRecvDirectory(HFILES hFile, LPCWSTR pszDir)
 	pFD = (FD_DATA *)hFile;
 	assert(pFD);
 
-	pszTmp = (LPWSTR)malloc(StrCharGetByteCount(pszDir) + 1);
+	pszTmp = (LPWSTR)malloc((size_t)StrCharGetByteCount(pszDir) + sizeof(WCHAR));
 	assert(pszTmp);
 	if (pszTmp == NULL)
 		return;
@@ -690,10 +696,9 @@ STATIC_FUNC int fmBFLinternal(void **pData,
 					}
 				}
 			nSize = StrCharGetByteCount(pszDirectory) +
-					StrCharGetByteCount(stF.cFileName);
-			nSize += 1;
-			nSize *= sizeof(WCHAR);
-			pszStr = (LPWSTR)malloc(nSize);
+					StrCharGetByteCount(stF.cFileName) +
+					(int)sizeof(WCHAR);
+			pszStr = (LPWSTR)malloc((size_t)nSize);
 			if (pszStr == (LPWSTR)0)
 				{
 				nRet = FM_ERR_NO_MEM;

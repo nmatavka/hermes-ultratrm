@@ -24,8 +24,8 @@ cmake --build --preset macos-wine-x64-release
 ```
 
 The produced Windows binaries land in `build/macos-wine-x64-release/bin/`.
-With TN3270 enabled, the output directory also includes `UltraTerminal3287.exe`,
-the sibling 3287 printer helper used by TN3270 associated printer sessions.
+With IBM 3270 enabled, the output directory also includes `UltraTerminal3287.exe`,
+the sibling 3287 printer helper used by IBM 3270 associated printer sessions.
 
 ## Smoke Test
 
@@ -35,10 +35,10 @@ Run the compiled app under Wine from the output directory so sibling DLLs are re
 bash scripts/run-wine.sh
 ```
 
-Run the TN3270 artifact smoke test:
+Run the IBM 3270 artifact smoke test:
 
 ```sh
-bash scripts/smoke-tn3270.sh
+bash scripts/smoke-ibm3270.sh
 ```
 
 Equivalent manual launch:
@@ -56,6 +56,6 @@ wine ./UltraTerminal.exe
 - Help, New Connection, and Emulator Settings dialogs open
 - translation DLL discovery still finds `htrn_jis.dll`
 - Winsock/Telnet settings are reachable
-- TN3270 appears in the Terminal Emulation list
+- IBM 3270 appears in the Terminal Emulation list
 - `UltraTerminal3287.exe` is present beside the main EXE and DLLs
 - TAPI remains enabled and degrades gracefully if Wine cannot service the telephony APIs

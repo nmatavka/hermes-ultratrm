@@ -89,7 +89,7 @@ BOOL IsUltraTerminalDefaultTelnetApp(void)
     // Get the path name of UltraTerminal.
     //
     acExePath[0] = L'\0';
-    GetModuleFileName(glblQueryHinst(), acExePath, MAX_PATH);
+    GetModuleFileNameW(glblQueryHinst(), acExePath, MAX_PATH);
 
     // Get IE's default telnet app.
     //
@@ -209,7 +209,7 @@ int SetTelnetCheckFlag(BOOL fCheck)
     // Create the Netscape telnet command string.
     //
     acRegistryData[0] = L'\0';
-    wsprintf(acRegistryData, "%s /t", acExePath);
+    wsprintfW(acRegistryData, L"%s /t", acExePath);
 
     // Write it to the registry.
     //
@@ -224,7 +224,7 @@ int SetTelnetCheckFlag(BOOL fCheck)
     // Create the IE telnet command string.
     //
     acRegistryData[0] = L'\0';
-    wsprintf(acRegistryData, "%s /t %%1", acExePath);
+    wsprintfW(acRegistryData, L"%s /t %%1", acExePath);
 
     // Write it to the registry.
     //

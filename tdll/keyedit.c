@@ -521,10 +521,10 @@ void removeKeyAndDisplay( keyMacro * aKeyMacro, HWND aEditCtrl )
     if ( aKeyMacro->keyCount == 1 )
         {
         aKeyMacro->keyName = 0;
-		WCHAR_Fill(keyString, L'\0', sizeof(keyString) / sizeof(WCHAR));
+        WCHAR_Fill(keyString, L'\0', sizeof(keyString) / sizeof(WCHAR));
 
         SetWindowText( aEditCtrl, keyString );
-        lStrLen = strlen( keyString );
+        lStrLen = lstrlenW( keyString );
         SendMessage( aEditCtrl, EM_SETSEL, lStrLen, lStrLen );
         }
 
@@ -536,9 +536,10 @@ void removeKeyAndDisplay( keyMacro * aKeyMacro, HWND aEditCtrl )
             aKeyMacro->keyMacro[aKeyMacro->macroLen] = 0;
 
             keysGetDisplayString( aKeyMacro->keyMacro, aKeyMacro->macroLen,  
-                                      keyString, sizeof(keyString) );
+                                      keyString,
+									  sizeof(keyString) / sizeof(keyString[0]) );
             SetWindowText( aEditCtrl, keyString );
-            lStrLen = strlen( keyString );
+            lStrLen = lstrlenW( keyString );
             SendMessage( aEditCtrl, EM_SETSEL, lStrLen, lStrLen );
             }
         }

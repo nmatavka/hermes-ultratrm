@@ -11,6 +11,7 @@
 #pragma hdrstop
 
 #include <time.h>
+#include <wchar.h>
 
 #include <tdll/features.h>
 
@@ -246,6 +247,17 @@ BOOL sessLoadSessionStuff(const HSESSION hSession)
 			/* Don't check this for now */
 			sessRestoreBackScroll(hSession);
 			}
+		}
+
+	if (bRet && IsWindow(hhSess->hwndTerm))
+		{
+		/*
+		 * Opening a saved session can leave the terminal viewport pointed
+		 * at stale scroll/backscroll state from the prior session handle.
+		 * Force the terminal through its full resize/reset path so the
+		 * reopened session starts on the live host screen.
+		 */
+		SendMessage(hhSess->hwndTerm, WM_TERM_FORCE_WMSIZE, 0, 0);
 		}
 
 	if (bRet)
@@ -776,11 +788,13 @@ int sessCheckAndLoadCmdLn(const HSESSION hSession)
 	// the code to follow  jkh, 03/22/1997
 	if (*acPath && hhSess->iCmdLnDial == CMDLN_DIAL_WINSOCK)
 		{
-		nIdx = strlen(pszTelnet);
-                if (_strnicmp(acPath, pszTelnet, nIdx) == 0)
+		nIdx = lstrlenW(pszTelnet);
+		if (CompareStringOrdinal(acPath, nIdx, pszTelnet, nIdx, TRUE) ==
+				CSTR_EQUAL)
 			{
 			// Remove the telnet string from the front of acPath
-			memmove(acPath, &acPath[nIdx], (strlen(acPath) - nIdx) + 1);
+			memmove(acPath, &acPath[nIdx],
+					(size_t)(lstrlenW(acPath) - nIdx + 1) * sizeof(WCHAR));
 			}
 		}
 
@@ -788,12 +802,12 @@ int sessCheckAndLoadCmdLn(const HSESSION hSession)
     // addr:nnn where nnn is the port number i.e. culine.colorado.edu:860
     // or there might be the name of an assigned port like hilgraeve.com:finger.
     // We support numeric port right now, may add port names later. jkh, 3/22/1997
-    pszPort = strchr(acPath, L':');
-    if (pszPort && isdigit(pszPort[1]))
+    pszPort = wcschr(acPath, L':');
+    if (pszPort && pszPort[1] >= L'0' && pszPort[1] <= L'9')
         {
         pszPort[0] = L'\0';
         ++pszPort;
-		hhSess->iTelnetPort = atoi(pszPort);
+		hhSess->iTelnetPort = (int)wcstol(pszPort, NULL, 10);
         }
     else
         pszPort = NULL;
@@ -804,7 +818,7 @@ int sessCheckAndLoadCmdLn(const HSESSION hSession)
     if (acName[0] == 0)
         {
         // Nothing on the command line
-        hhSess->iCmdLnDial = CMDLN_DIAL_NEW;
+        hhSess->iCmdLnDial = CMDLN_DIAL_OPEN;
         iRet = 0;
         }
     else

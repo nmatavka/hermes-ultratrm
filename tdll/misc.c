@@ -272,20 +272,20 @@ LPWSTR mscModifyToFit(HWND hwnd, LPWSTR pszStr)
  *	HICON or zero on error.
  *
  */
-HICON extLoadIcon(LPCSTR id)
+HICON extLoadIcon(LPCWSTR id)
 	{
 	static HINSTANCE hInstance;
 
 	if (hInstance == 0)
 		{
-		if ((hInstance = LoadLibrary("hticons")) == 0)
+		if ((hInstance = LoadLibraryW(L"hticons")) == 0)
 			{
 			assert(FALSE);
 			return 0;
 			}
 		}
 
-	return LoadIcon(hInstance, id);
+	return LoadIconW(hInstance, id);
 	}
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-

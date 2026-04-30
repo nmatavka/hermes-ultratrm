@@ -17,6 +17,7 @@
 #include <tdll/globals.h>
 #include <tdll/timers.h>
 #include <tdll/com.h>
+#include <tdll/rexxhapi.h>
 #include <tdll/xfer_msc.h>
 #include <emu/emu.h>
 #if defined(CHARACTER_TRANSLATION)
@@ -548,6 +549,10 @@ void CLoopCharIn(ST_CLOOP *pstCLoop, ECHAR chIn) {
     if (pstCLoop->stWorkSettings.fLineWait &&
         chIn == pstCLoop->stWorkSettings.chWaitChar)
         CLoopSndControl((HCLOOP)pstCLoop, CLOOP_RESUME, CLOOP_SB_LINEWAIT);
+
+    utRexxHapiRecordInputChar(pstCLoop->hSession, chIn);
+    if (chIn == ECHAR_CAST('\r') && pstCLoop->stWorkSettings.fAddLF)
+        utRexxHapiRecordInputChar(pstCLoop->hSession, ECHAR_CAST('\n'));
 
     // Display character in normal or image mode
     if (!pstCLoop->fSuppressDsp) {

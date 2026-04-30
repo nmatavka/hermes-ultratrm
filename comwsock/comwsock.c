@@ -147,6 +147,8 @@
 #include <windows.h>
 #pragma hdrstop
 
+#include <wchar.h>
+
 #include <tdll/stdtyp.h>
 
 #if defined(INCL_WINSOCK)
@@ -165,6 +167,27 @@
 #include <tdll/com.hh>
 #include <emu/emu.h>
 
+/*
+ * Include OpenSSL headers for implementing Telnet StartTLS.  These headers
+ * provide the SSL and TLS APIs used to upgrade a plain TCP socket to a
+ * secure TLS connection.  They are only referenced when the winsock
+ * driver StartTLS option has been requested; otherwise they do not impact
+ * normal operation.
+ */
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+
+/*
+ * Global pointer used by WinSockSendRaw and WinSockRecvRaw to determine
+ * whether a given socket is currently wrapped in a TLS session.  When
+ * gTlsPrivate is non-NULL and the passed socket matches the one stored
+ * in the ST_STDCOM structure, reads and writes are routed through
+ * SSL_read and SSL_write rather than the plain send/recv calls.  See
+ * WsckStartTls for how this pointer is initialized.  It is cleared in
+ * WsckFreeTls.
+ */
+static ST_STDCOM *gTlsPrivate = NULL;
+
 BOOL WINAPI _CRT_INIT(HINSTANCE hInstDll, DWORD fdwReason, LPVOID lpReserved);
 int wsckResolveAddress(WCHAR *pszRemote, unsigned long *pulAddr);
 LRESULT FAR PASCAL WndSockWndProc(HWND hWnd, UINT uiMsg, WPARAM uiPar1, LPARAM lPar2);
@@ -176,7 +199,249 @@ int WinSockAnswerSpecial(ST_STDCOM *pstPrivate);
 #if defined(INCL_VIDEOTEX)
 static int WinSockIsVideotex(ST_STDCOM *pstPrivate);
 #endif
-static int WinSockIsTN5250(ST_STDCOM *pstPrivate);
+static int WinSockIsIbm5250(ST_STDCOM *pstPrivate);
+static HEMU WsckQueryEmuHandle(ST_STDCOM *pstPrivate);
+static void WsckDeliverIbm3270Record(ST_STDCOM *pstPrivate, HEMU hEmu);
+static int WsckRouteReceivedBytes(ST_STDCOM *pstPrivate, BYTE *pbBuffer,
+		int cbBuffer);
+static int WinSockSendRaw(SOCKET hSocket, const void *pvData, int nSize,
+		int nFlags);
+static int WinSockRecvRaw(SOCKET hSocket, void *pvData, int nSize,
+		int nFlags);
+static void WsckInitializeWinsockState(ST_STDCOM *pstPrivate);
+
+static int WinSockSendRaw(SOCKET hSocket, const void *pvData, int nSize,
+        int nFlags)
+        {
+        /*
+         * Route outgoing bytes through the TLS layer when StartTLS is
+         * active.  The global gTlsPrivate holds the ST_STDCOM object
+         * whose socket has been upgraded to TLS.  If the passed socket
+         * matches and the TLS session is active, use SSL_write to
+         * encrypt and send the data.  Otherwise fall back to the
+         * underlying send() call.  Note: SSL_write does not take an
+         * nFlags argument; SSL_MODE_AUTO_RETRY is enabled on the
+         * context to handle internal retries.
+         */
+        if (gTlsPrivate != NULL &&
+            (gTlsPrivate->fStartTlsActive || gTlsPrivate->fImplicitTlsActive) &&
+            gTlsPrivate->hSocket == hSocket &&
+            gTlsPrivate->ssl != NULL)
+            {
+            return SSL_write((SSL *)gTlsPrivate->ssl, pvData, nSize);
+            }
+        return send(hSocket, (const char *)pvData, nSize, nFlags);
+        }
+
+static int WinSockRecvRaw(SOCKET hSocket, void *pvData, int nSize,
+        int nFlags)
+        {
+        /*
+         * When the connection has been upgraded to TLS (via StartTLS)
+         * use SSL_read to decrypt incoming bytes.  Otherwise call
+         * recv().  The TLS layer will manage internal buffering and
+         * handshake state.  If SSL_read returns a non-positive value
+         * because of an error or EOF, propagate the return code.
+         */
+        if (gTlsPrivate != NULL &&
+            (gTlsPrivate->fStartTlsActive || gTlsPrivate->fImplicitTlsActive) &&
+            gTlsPrivate->hSocket == hSocket &&
+            gTlsPrivate->ssl != NULL)
+            {
+            return SSL_read((SSL *)gTlsPrivate->ssl, pvData, nSize);
+            }
+        return recv(hSocket, (char *)pvData, nSize, nFlags);
+        }
+
+static WCHAR *WsckSkipSpaces(WCHAR *psz)
+	{
+	while (psz && (*psz == L' ' || *psz == L'\t' ||
+			*psz == L'\r' || *psz == L'\n'))
+		++psz;
+	return psz;
+	}
+
+static void WsckTrimTrailingSpaces(WCHAR *psz)
+	{
+	int cch;
+
+	if (psz == NULL)
+		return;
+
+	cch = lstrlenW(psz);
+	while (cch > 0)
+		{
+		WCHAR ch = psz[cch - 1];
+		if (ch != L' ' && ch != L'\t' && ch != L'\r' && ch != L'\n')
+			break;
+		psz[--cch] = L'\0';
+		}
+	}
+
+static void WsckWideToHostNameA(LPCWSTR pszRemote, char *pszRemoteA,
+		size_t cchRemoteA)
+	{
+	if (pszRemoteA == NULL || cchRemoteA == 0)
+		return;
+
+	pszRemoteA[0] = '\0';
+	if (pszRemote == NULL || *pszRemote == L'\0')
+		return;
+
+	if (WideCharToMultiByte(CP_ACP, 0, pszRemote, -1, pszRemoteA,
+			(int)cchRemoteA, NULL, NULL) == 0)
+		pszRemoteA[0] = '\0';
+	pszRemoteA[cchRemoteA - 1] = '\0';
+	}
+
+/*
+ * Perform a TLS handshake on the existing Winsock socket.  This function
+ * is called after the Telnet START_TLS negotiation completes (see
+ * WinSockNetworkVirtualTerminal).  It creates an SSL context and
+ * attaches it to the socket, then performs a client handshake.  On
+ * success the ST_STDCOM fields are updated and global gTlsPrivate is
+ * set, so subsequent reads and writes are routed through the TLS
+ * session.  Returns 0 on success or a negative value on failure.
+ */
+int WsckStartTls(ST_STDCOM *pstPrivate)
+	        {
+	        int ret = -1;
+        u_long nonblocking;
+        u_long blocking;
+	        if (pstPrivate == NULL)
+	                return -1;
+	        /* If TLS is already active, no action is required. */
+	        if (pstPrivate->fStartTlsActive || pstPrivate->fImplicitTlsActive)
+	                return 0;
+        /* Initialize the OpenSSL library (thread-safe in newer versions). */
+        SSL_load_error_strings();
+        OpenSSL_add_ssl_algorithms();
+        const SSL_METHOD *method = TLS_client_method();
+        SSL_CTX *ctx = SSL_CTX_new(method);
+        if (ctx == NULL)
+                return -1;
+        /* Automatically retry reads/writes so SSL_read/SSL_write will
+         * block until data is available. */
+        SSL_CTX_set_mode(ctx, SSL_MODE_AUTO_RETRY);
+        SSL *ssl = SSL_new(ctx);
+        if (ssl == NULL)
+                {
+                SSL_CTX_free(ctx);
+                return -1;
+                }
+        if (pstPrivate->szRemoteAddrA[0] != '\0')
+                SSL_set_tlsext_host_name(ssl, pstPrivate->szRemoteAddrA);
+        SSL_set_fd(ssl, (int)pstPrivate->hSocket);
+        blocking = 0;
+        ioctlsocket(pstPrivate->hSocket, FIONBIO, &blocking);
+        /* Perform the TLS handshake. */
+        if (SSL_connect(ssl) != 1)
+                {
+                /* Handshake failed; clean up and return error. */
+                nonblocking = 1;
+                ioctlsocket(pstPrivate->hSocket, FIONBIO, &nonblocking);
+                SSL_free(ssl);
+                SSL_CTX_free(ctx);
+                return -1;
+                }
+        nonblocking = 1;
+        ioctlsocket(pstPrivate->hSocket, FIONBIO, &nonblocking);
+        /* Handshake succeeded.  Update fields. */
+        pstPrivate->ssl_ctx = ctx;
+        pstPrivate->ssl = ssl;
+        /* Mark the appropriate TLS mode as active.  Explicit STARTTLS
+         * negotiation sets fStartTlsActive, while implicit TLS sets
+         * fImplicitTlsActive.  In either case the global gTlsPrivate
+         * pointer is updated so that send/recv functions route
+         * through SSL. */
+        if (pstPrivate->fStartTlsRequested)
+                pstPrivate->fStartTlsActive = 1;
+        if (pstPrivate->fImplicitTlsRequested)
+                pstPrivate->fImplicitTlsActive = 1;
+        /* Set global pointer so WinSockSendRaw/RecvRaw route via SSL. */
+        gTlsPrivate = pstPrivate;
+        ret = 0;
+        return ret;
+        }
+
+/*
+ * Free any TLS structures associated with the ST_STDCOM.  Called
+ * during port deactivation or when a TLS handshake fails.  It shuts
+ * down the TLS session, frees the SSL object and context, and clears
+ * the StartTLS flags.  The global gTlsPrivate pointer is cleared.
+ */
+static void WsckFreeTls(ST_STDCOM *pstPrivate)
+        {
+        if (pstPrivate == NULL)
+                return;
+	        if (pstPrivate->fStartTlsActive || pstPrivate->fImplicitTlsActive)
+	                {
+                if (pstPrivate->ssl != NULL)
+                        {
+                        /* Send a TLS close_notify alert. */
+                        SSL_shutdown((SSL *)pstPrivate->ssl);
+                        SSL_free((SSL *)pstPrivate->ssl);
+                        pstPrivate->ssl = NULL;
+                        }
+                if (pstPrivate->ssl_ctx != NULL)
+                        {
+                        SSL_CTX_free((SSL_CTX *)pstPrivate->ssl_ctx);
+                        pstPrivate->ssl_ctx = NULL;
+                        }
+                pstPrivate->fStartTlsActive = 0;
+                pstPrivate->fImplicitTlsActive = 0;
+                if (gTlsPrivate == pstPrivate)
+                        gTlsPrivate = NULL;
+                }
+        }
+
+static void WsckInitializeWinsockState(ST_STDCOM *pstPrivate)
+	{
+	if (pstPrivate == NULL)
+		return;
+
+	pstPrivate->hSocket = INVALID_SOCKET;
+	pstPrivate->fConnected = 0;
+	pstPrivate->szRemoteAddr[0] = L'\0';
+	pstPrivate->szRemoteAddrA[0] = '\0';
+	pstPrivate->nPort = 23;
+	pstPrivate->ulCompatibility = 0;
+	pstPrivate->ulAddr = 0;
+	pstPrivate->fSndBreak = FALSE;
+	pstPrivate->nRBufrSize = WSOCK_SIZE_INQ;
+	pstPrivate->pbSendBufr = NULL;
+	pstPrivate->nSendBufrLen = 0;
+	pstPrivate->pbSndPtrEnd = NULL;
+	pstPrivate->hComReadThread = NULL;
+	pstPrivate->hComWriteThread = NULL;
+	pstPrivate->hComConnectThread = NULL;
+	pstPrivate->fClearSendBufr = FALSE;
+	pstPrivate->fEscapeFF = TRUE;
+	pstPrivate->fSeenFF = FALSE;
+	/*
+	 * Reset StartTLS state.  These fields control whether TLS is
+	 * negotiated for the Winsock driver.  They must be cleared at
+	 * initialization so that each new connection starts without TLS.
+	 */
+    pstPrivate->fStartTlsRequested = 0;
+    pstPrivate->fStartTlsActive = 0;
+    pstPrivate->fImplicitTlsRequested = 0;
+    pstPrivate->fImplicitTlsActive = 0;
+    pstPrivate->ssl_ctx = NULL;
+    pstPrivate->ssl = NULL;
+	pstPrivate->stHost.sin_family = AF_INET;
+	pstPrivate->NVTstate = NVT_THRU;
+	pstPrivate->fIbm3270Mode = FALSE;
+	pstPrivate->fIbm3270E = FALSE;
+	pstPrivate->fIbm3270EReady = FALSE;
+	pstPrivate->cbIbm3270Record = 0;
+	pstPrivate->nSbOption = 0;
+	pstPrivate->nSbLen = 0;
+	pstPrivate->fSbIac = FALSE;
+#ifdef INCL_CALL_ANSWERING
+	pstPrivate->fAnswer = 0;
+#endif
+	}
 
 LONG WinSockConnectEvent(ST_STDCOM* pstPrivate, LPARAM lPar);
 LONG WinSockReadEvent(ST_STDCOM* pstPrivate, LPARAM lPar);
@@ -208,6 +473,10 @@ int ComLoadWinsockDriver(HCOM pstCom)
 
 	if ( !pstCom )
 		return COM_FAILED;
+	if (pstCom->pvDriverData == NULL)
+		return COM_FAILED;
+
+	WsckInitializeWinsockState((ST_STDCOM *)pstCom->pvDriverData);
 
 	pstCom->pfPortActivate   = WsckPortActivate;
 	pstCom->pfPortDeactivate = WsckPortDeactivate;
@@ -326,17 +595,7 @@ int WINAPI WsckDeviceInitialize(HCOM hCom,
             }
         }
 
-    // Setup up reasonable default device values in case this type of
-    //  device has not been used in a session before
-	pstPrivate->hSocket = INVALID_SOCKET;
-	pstPrivate->nPort = 23;
-	pstPrivate->fConnected = 0;
-    pstPrivate->hComReadThread = NULL;
-    pstPrivate->hComWriteThread = NULL;
-	pstPrivate->fEscapeFF = TRUE;
-#ifdef INCL_CALL_ANSWERING
-    pstPrivate->fAnswer = 0;
-#endif
+	WsckInitializeWinsockState(pstPrivate);
 
     if (iRetVal != COM_OK)
         {
@@ -424,19 +683,23 @@ int WINAPI WsckDeviceSpecial(void *pvPrivate,
 	// character.  REV 09/20/2000
 	//
 	WCHAR			achInstructions[MAX_IP_ADDR_LEN+11+1];
-	WCHAR			*pszToken = achInstructions;
+	WCHAR			*pszCommand;
+	WCHAR			*pszItem = NULL;
+	WCHAR			*pszValue = NULL;
 	int				iIndex;
 	WCHAR			szResult[MAX_IP_ADDR_LEN+11+1];
 	//ULONG			dwThreadID;
 
-	static WCHAR *apszItems[] =
+	static const WCHAR *apszItems[] =
 		{
-		"IPADDR",
-		"PORTNUM",
-		"ISCONNECTED",
-		"ESC_FF",					/* 3 */
-        "ANSWER",
-		NULL
+		L"IPADDR",
+		L"PORTNUM",
+		L"ISCONNECTED",
+		L"ESC_FF",					/* 3 */
+        L"ANSWER",
+        L"TLS",
+        L"TLSIMPLICIT",
+        NULL
 		};
 
 	// supported instruction strings:
@@ -452,44 +715,67 @@ int WINAPI WsckDeviceSpecial(void *pvPrivate,
 	if (sizeof(achInstructions)/sizeof(WCHAR) < (size_t)(StrCharGetStrLength(pszInstructions) + 1))
 		return COM_NOT_SUPPORTED;
 
-	StrCharCopyN(achInstructions, (LPWSTR)pszInstructions, nBufrSize);
+	StrCharCopyN(achInstructions, pszInstructions,
+		sizeof(achInstructions) / sizeof(achInstructions[0]));
 
 	if (pszResult)
 		*pszResult = L'\0';
 
-	pszToken = strtok(achInstructions, " ");
-	if (!pszToken)
+	pszCommand = WsckSkipSpaces(achInstructions);
+	if (!pszCommand || !*pszCommand)
 		return COM_NOT_SUPPORTED;
+
+	pszItem = wcspbrk(pszCommand, L" \t");
+	if (pszItem)
+		{
+		*pszItem++ = L'\0';
+		pszItem = WsckSkipSpaces(pszItem);
+		}
+	else
+		{
+		pszItem = pszCommand + lstrlenW(pszCommand);
+		}
 
 	EnterCriticalSection(&pstPrivate->csect);
 
-	if (StrCharCmpi(pszToken, "SET") == 0)
+	if (StrCharCmpi(pszCommand, L"SET") == 0)
 		{
 		iRetVal = COM_OK;
-		pszToken = strtok(NULL, " =");
-		if (!pszToken)
-			pszToken = "";
+		pszValue = wcschr(pszItem, L'=');
+		if (pszValue)
+			{
+			*pszValue++ = L'\0';
+			}
+		else
+			{
+			pszValue = wcspbrk(pszItem, L" \t");
+			if (pszValue)
+				*pszValue++ = L'\0';
+			}
+		WsckTrimTrailingSpaces(pszItem);
+		if (pszValue)
+			pszValue = WsckSkipSpaces(pszValue);
+		else
+			pszValue = pszItem + lstrlenW(pszItem);
 
 		// Look up the item to set.
 		for (iIndex = 0; apszItems[iIndex]; ++iIndex)
-			if (StrCharCmpi(pszToken, apszItems[iIndex]) == 0)
+			if (StrCharCmpi(pszItem, apszItems[iIndex]) == 0)
 				break;
 
-		// Isolate the new value to be set
-		pszToken = strtok(NULL, "\n");
-
-		if (pszToken && *pszToken)
+		if (pszValue && *pszValue)
 			{
 			// Several items take numeric values
-			ulSetVal = strtoul(pszToken, &pszEnd, 0);
+			ulSetVal = wcstoul(pszValue, &pszEnd, 0);
 
 			switch(iIndex)
 				{
 			case 0: // IPADDR
-				ulSetVal = (unsigned) StrCharGetByteCount(pszToken);
-				if ( ulSetVal < sizeof(pstPrivate->szRemoteAddr))
+				ulSetVal = (unsigned) StrCharGetStrLength(pszValue);
+				if (ulSetVal < sizeof(pstPrivate->szRemoteAddr) /
+						sizeof(pstPrivate->szRemoteAddr[0]))
 					{
-					StrCharCopy(pstPrivate->szRemoteAddr, pszToken);
+					StrCharCopy(pstPrivate->szRemoteAddr, pszValue);
 					iRetVal = 0;
 					}
 				else
@@ -502,10 +788,10 @@ int WINAPI WsckDeviceSpecial(void *pvPrivate,
 				break;
 
 			case 3: // ESC_FF
-				pstPrivate->fEscapeFF = (int) atoi(pszToken);
+				pstPrivate->fEscapeFF = (ulSetVal != 0);
 				//DbgOutStr("set fEscapeFF = %d (%d) %s %d",
-				//pstPrivate->fEscapeFF,ulSetVal,pszToken,
-				//(int) atoi(pszToken),0);
+				//pstPrivate->fEscapeFF,ulSetVal,pszValue,
+				//(int) _wtoi(pszValue),0);
 				break;
 
             case 4: // ANSWER
@@ -517,30 +803,57 @@ int WINAPI WsckDeviceSpecial(void *pvPrivate,
 #endif
                 break;
 
+            case 5: // TLS
+                /* Enable or disable explicit STARTTLS negotiation.
+                 * A non-zero value requests that the Telnet driver
+                 * negotiate the START_TLS option during connection
+                 * setup. */
+                pstPrivate->fStartTlsRequested = (ulSetVal != 0);
+                if (pstPrivate->fStartTlsRequested)
+                    {
+                    /* Clear implicit TLS to ensure only one mode
+                     * is active at a time. */
+                    pstPrivate->fImplicitTlsRequested = 0;
+                    }
+                iRetVal = 0;
+                break;
+            case 6: // TLSIMPLICIT
+                /* Enable or disable implicit TLS.  A non-zero value
+                 * requests that the driver wrap the connection in
+                 * TLS immediately after connecting, without any
+                 * Telnet STARTTLS negotiation. */
+                pstPrivate->fImplicitTlsRequested = (ulSetVal != 0);
+                if (pstPrivate->fImplicitTlsRequested)
+                    {
+                    pstPrivate->fStartTlsRequested = 0;
+                    }
+                iRetVal = 0;
+                break;
+
 			default:
 				iRetVal = COM_FAILED;
 				//DbgOutStr("DevSpec: Unrecognized instructions!", 0,0,0,0,0);
 				break;
 				}
 			}
-		else	// if (pszToken && *pszToken)
+		else	// if (pszValue && *pszValue)
 			{
 			assert(0);
 			iRetVal = COM_NOT_SUPPORTED;
 			}
 		}
-	else if (StrCharCmpi(pszToken, "QUERY") == 0)
+	else if (StrCharCmpi(pszCommand, L"QUERY") == 0)
 		{
 		iRetVal = COM_OK;
-		pszToken = strtok(NULL, "\n");
+		WsckTrimTrailingSpaces(pszItem);
 		szResult[0] = L'\0';
 
 		// Look up the item to query
 		for (iIndex = 0; apszItems[iIndex]; ++iIndex)
-			if (StrCharCmpi(pszToken, apszItems[iIndex]) == 0)
+			if (StrCharCmpi(pszItem, apszItems[iIndex]) == 0)
 				break;
 
-		if (*pszToken)
+		if (*pszItem)
 			{
 			switch(iIndex)
 				{
@@ -551,18 +864,29 @@ int WINAPI WsckDeviceSpecial(void *pvPrivate,
 				break;
 
 			case 1: // PORTNUM
-				wsprintf(szResult, "%d", pstPrivate->nPort);
+				wsprintfW(szResult, L"%d", pstPrivate->nPort);
 				iRetVal = 0;
 				break;
 
 			case 2: // ISCONNECTED
-				wsprintf(szResult, "%d", pstPrivate->fConnected);
+				wsprintfW(szResult, L"%d", pstPrivate->fConnected);
 				iRetVal = 0;
 				break;
 
+            case 5: // TLS
+                /* Return whether explicit StartTLS negotiation has been requested. */
+                wsprintfW(szResult, L"%d", pstPrivate->fStartTlsRequested);
+                iRetVal = 0;
+                break;
+            case 6: // TLSIMPLICIT
+                /* Return whether implicit TLS has been requested. */
+                wsprintfW(szResult, L"%d", pstPrivate->fImplicitTlsRequested);
+                iRetVal = 0;
+                break;
+
             case 4: // ANSWER
 #ifdef INCL_CALL_ANSWERING
-                wsprintf(szResult, "%d", pstPrivate->fAnswer);
+                wsprintfW(szResult, L"%d", pstPrivate->fAnswer);
                 iRetVal = 0;
 #else
                 iRetVal = COM_FAILED;
@@ -573,14 +897,14 @@ int WINAPI WsckDeviceSpecial(void *pvPrivate,
 				iRetVal = COM_FAILED;
 				break;
 				}
-			if ( iRetVal == 0 && StrCharGetByteCount(szResult) <
-				nBufrSize )
+			if (iRetVal == 0 &&
+				StrCharGetStrLength(szResult) + 1 <= nBufrSize)
 				StrCharCopy(pszResult, szResult);
 			else
 				iRetVal = COM_FAILED;
 			}
 		}
-     else if (lstrcmpi(pszInstructions, "Send Break") == 0)
+     else if (lstrcmpiW(pszInstructions, L"Send Break") == 0)
         {
         // This is the telent "Break" key processing.  When
         // the user presses Ctrl-Break on the terminal sreen
@@ -594,14 +918,14 @@ int WINAPI WsckDeviceSpecial(void *pvPrivate,
         ach[0] = IAC;
         ach[1] = BREAK;
 
-		if (send(pstPrivate->hSocket, ach,	2, 0) != 2)
+		if (WinSockSendRaw(pstPrivate->hSocket, ach,	2, 0) != 2)
             {
             assert(0);
             }
 
         iRetVal = COM_OK;
         }
-   else if (lstrcmpi(pszInstructions, "Send IP") == 0)
+   else if (lstrcmpiW(pszInstructions, L"Send IP") == 0)
         {
         // This is the telent Interrupt Process.  When
         // the user presses Alt-Break on the terminal sreen
@@ -625,7 +949,7 @@ int WINAPI WsckDeviceSpecial(void *pvPrivate,
         ach[0] = IAC;
         ach[1] = IP;
 
-		if (send(pstPrivate->hSocket, ach,	2, 0) != 2)
+		if (WinSockSendRaw(pstPrivate->hSocket, ach,	2, 0) != 2)
             {
             assert(0);
             }
@@ -633,7 +957,7 @@ int WINAPI WsckDeviceSpecial(void *pvPrivate,
         ach[0] = IAC;
         ach[1] = DM;
 
-        if (send(pstPrivate->hSocket, ach,	2, MSG_OOB) != 2)
+        if (WinSockSendRaw(pstPrivate->hSocket, ach,	2, MSG_OOB) != 2)
             {
             assert(0);
             }
@@ -641,7 +965,7 @@ int WINAPI WsckDeviceSpecial(void *pvPrivate,
 
         iRetVal = COM_OK;
         }
-	else if (lstrcmpi(pszInstructions, "Update Terminal Size") == 0)
+	else if (lstrcmpiW(pszInstructions, L"Update Terminal Size") == 0)
         {
 		// The dimensions of the terminal have changed. If we have negotiated
 		// to use the Telnet NAWS option, (Negotiate About Terminal Size), then
@@ -849,6 +1173,183 @@ int WINAPI WsckSndBufrQuery(void *pvPrivate,
     return iRetVal;
     }
 
+static HEMU WsckQueryEmuHandle(ST_STDCOM *pstPrivate)
+	{
+	HSESSION hSession;
+
+	if (pstPrivate == NULL || pstPrivate->hCom == 0)
+		return 0;
+
+	if (ComGetSession(pstPrivate->hCom, &hSession) != COM_OK ||
+			hSession == 0)
+		return 0;
+
+	return sessQueryEmuHdl(hSession);
+	}
+
+static int WinSockIsIbm5250(ST_STDCOM *pstPrivate)
+	{
+	HEMU hEmu = WsckQueryEmuHandle(pstPrivate);
+	return (hEmu && emuQueryEmulatorId(hEmu) == EMU_IBM5250) ? TRUE : FALSE;
+	}
+
+static void WsckDeliverIbm3270Record(ST_STDCOM *pstPrivate, HEMU hEmu)
+	{
+	if (pstPrivate == NULL)
+		return;
+
+	if (hEmu && pstPrivate->cbIbm3270Record > 0)
+		{
+		emuIbm3270RecordIn(hEmu, pstPrivate->abIbm3270Record,
+				pstPrivate->cbIbm3270Record);
+		}
+
+	pstPrivate->cbIbm3270Record = 0;
+	}
+
+static int WsckRouteReceivedBytes(ST_STDCOM *pstPrivate, BYTE *pbBuffer,
+		int cbBuffer)
+	{
+	HEMU hEmu;
+	int fIbm3270;
+	int nBytesCopied = 0;
+	int nIndx;
+
+	if (pstPrivate == NULL || pbBuffer == NULL || cbBuffer <= 0)
+		return 0;
+
+	hEmu = WsckQueryEmuHandle(pstPrivate);
+
+#if defined(INCL_VIDEOTEX)
+	if (hEmu && emuQueryEmulatorId(hEmu) == EMU_VIDEOTEX)
+		{
+		emuVideotexBytesIn(hEmu, (const unsigned char *)pbBuffer, cbBuffer);
+		return 0;
+		}
+#endif
+
+	if (hEmu && emuQueryEmulatorId(hEmu) == EMU_IBM5250)
+		{
+		emuIbm5250BytesIn(hEmu, (const unsigned char *)pbBuffer, cbBuffer);
+		return 0;
+		}
+
+	fIbm3270 = WinSockIsIbm3270(pstPrivate);
+
+	for (nIndx = 0; nIndx < cbBuffer; nIndx++)
+		{
+		int nNVTRes;
+
+		if (pbBuffer[nIndx] == IAC || pstPrivate->NVTstate != NVT_THRU)
+			{
+			nNVTRes = WinSockNetworkVirtualTerminal((ECHAR)pbBuffer[nIndx],
+					(void far *)pstPrivate);
+			}
+		else
+			{
+			nNVTRes = NVT_KEEP;
+			}
+
+		if (nNVTRes == NVT_EOR)
+			{
+			if (fIbm3270)
+				WsckDeliverIbm3270Record(pstPrivate, hEmu);
+			continue;
+			}
+
+		if (nNVTRes != NVT_DISCARD)
+			{
+			if (fIbm3270)
+				{
+				if (pstPrivate->cbIbm3270Record <
+						(int)sizeof(pstPrivate->abIbm3270Record))
+					{
+					pstPrivate->abIbm3270Record[pstPrivate->cbIbm3270Record++] =
+							pbBuffer[nIndx];
+					}
+				}
+			else
+				{
+				pbBuffer[nBytesCopied++] = pbBuffer[nIndx];
+				}
+			}
+		}
+
+	return nBytesCopied;
+	}
+
+VOID WinSockSendBuffer(ST_STDCOM * pstPrivate, INT nSize, const void *pvBuffer)
+	{
+	int nCount, nError;
+
+	nCount = WinSockSendRaw(pstPrivate->hSocket, pvBuffer, nSize, 0);
+
+	if (nCount == SOCKET_ERROR)
+		{
+		nError = WSAGetLastError();
+
+		if (nError == WSAEWOULDBLOCK)
+			{
+			DbgOutStr("WSSB would block.  Queueing %d bytes\n",
+					nSize,0,0,0,0);
+			if (sndQueueAppend(pstPrivate, (VOID FAR *)pvBuffer, nSize) != COM_OK)
+				ComNotify(pstPrivate->hCom, CONNECT);
+#ifdef MULTITHREAD
+			else
+				SetEvent(pstPrivate->ahEvent[EVENT_WRITE]);
+#endif
+			}
+		else
+			{
+			ComNotify(pstPrivate->hCom, CONNECT);
+			}
+		}
+	}
+
+VOID WinSockSendMessage(ST_STDCOM * pstPrivate, INT nMsg, INT nChar)
+	{
+	unsigned char acMsg[3];
+
+	acMsg[0] = IAC;
+	acMsg[1] = (UCHAR)nMsg;
+	acMsg[2] = (UCHAR)nChar;
+
+	WinSockSendBuffer(pstPrivate, 3, acMsg);
+	}
+
+int FAR PASCAL sndQueueAppend(ST_STDCOM* pstPrivate,
+						VOID FAR *pvBufr, int nBytesToAppend)
+	{
+	BYTE	*puchEnd;
+	USHORT  usReturns = COM_OK;
+
+	assert( pstPrivate != NULL );
+	assert( pvBufr != NULL );
+
+	if ( pstPrivate && pvBufr && nBytesToAppend > 0 )
+		{
+		if (pstPrivate->nSendBufrLen + nBytesToAppend >
+				(int) sizeof(pstPrivate->abSndBufr))
+			{
+			DbgOutStr("SQAPP: buffer full", 0,0,0,0,0);
+			return COM_BUSY;
+			}
+
+		pstPrivate->fSending = TRUE;
+
+		pstPrivate->pbSendBufr = pstPrivate->abSndBufr;
+		puchEnd = pstPrivate->pbSendBufr + pstPrivate->nSendBufrLen;
+
+		DbgOutStr("sQA: appending %d bytes to addr = %lx.  Existing buffer is %d bytes at %lx\n",
+			nBytesToAppend,	puchEnd, pstPrivate->nSendBufrLen, pstPrivate->pbSendBufr,0);
+		pstPrivate->nSendBufrLen += nBytesToAppend;
+		MemCopy(puchEnd, (LPSTR) pvBufr, (unsigned) nBytesToAppend);
+		}
+
+	DbgOutStr("sQA: copy done\n", 0,0,0,0,0);
+	return usReturns;
+	}
+
 
 #if !defined(MULTITHREAD)
 	// WINSOCK the way we know and love it from Win3.1 days
@@ -986,12 +1487,16 @@ int WINAPI WsckPortDeactivate(void *pvPrivate)
 		pstPrivate->hwndEvents = 0;
 		}
 
-	pstPrivate->fTn3270Mode = FALSE;
-	pstPrivate->fTn3270E = FALSE;
-	pstPrivate->fTn3270EReady = FALSE;
-	pstPrivate->cbTn3270Record = 0;
+	pstPrivate->fIbm3270Mode = FALSE;
+	pstPrivate->fIbm3270E = FALSE;
+	pstPrivate->fIbm3270EReady = FALSE;
+	pstPrivate->cbIbm3270Record = 0;
 		
 	// Destroy the read buffer		
+    /* If a TLS session is active, shut it down and free resources before
+     * closing the socket.  This also clears the global gTlsPrivate. */
+    WsckFreeTls(pstPrivate);
+
     if (pstPrivate->pbBufrStart)
         {
         free(pstPrivate->pbBufrStart);
@@ -1022,9 +1527,7 @@ int WINAPI WsckPortDeactivate(void *pvPrivate)
 int WINAPI WsckRcvRefill(void *pvPrivate)
 	{
 	ST_STDCOM *pstPrivate = (ST_STDCOM *) pvPrivate;
-	int nIndx;
 	int iBytesRead = 0;
-	int nNVTRes;
 	int nBytesCopied;
 	ST_COM_CONTROL FAR *pstComCntrl;
     int iReturn = TRUE;
@@ -1038,7 +1541,7 @@ int WINAPI WsckRcvRefill(void *pvPrivate)
 	// Read up to pstPrivate->usRBufrSize bytes into pstPrivate->puchRBufr
 	// and set iBytesRead to the number read.
 	iBytesRead = 0;
-	iBytesRead = recv(pstPrivate->hSocket,
+	iBytesRead = WinSockRecvRaw(pstPrivate->hSocket,
 						(LPSTR)pstPrivate->pbBufrStart,
 						(int)pstPrivate->nRBufrSize,
 						0);
@@ -1060,119 +1563,11 @@ int WINAPI WsckRcvRefill(void *pvPrivate)
 		return FALSE;
 		}
 
-#if defined(INCL_VIDEOTEX)
-	if (WinSockIsVideotex(pstPrivate))
-		{
-		HSESSION hSession;
-		HEMU hEmu;
-
-		if (ComGetSession(pstPrivate->hCom, &hSession) == COM_OK &&
-				hSession != 0)
-			{
-			hEmu = sessQueryEmuHdl(hSession);
-			if (hEmu)
-				emuVideotexBytesIn(hEmu,
-						(const unsigned char *)pstPrivate->pbBufrStart,
-						iBytesRead);
-			}
-
-		*(pstPrivate->pbBufrStart) = (char)-1;
-		pstComCntrl = (ST_COM_CONTROL *)pstPrivate->hCom;
-		pstComCntrl->puchRBData = pstPrivate->pbBufrStart;
-		pstComCntrl->puchRBDataLimit = pstPrivate->pbBufrStart;
+	if (pstPrivate->pbBufrStart == NULL)
 		return FALSE;
-		}
-#endif
 
-	if (WinSockIsTN5250(pstPrivate))
-		{
-		HSESSION hSession;
-		HEMU hEmu;
-
-		if (ComGetSession(pstPrivate->hCom, &hSession) == COM_OK &&
-				hSession != 0)
-			{
-			hEmu = sessQueryEmuHdl(hSession);
-			if (hEmu)
-				emuTn5250BytesIn(hEmu,
-						(const unsigned char *)pstPrivate->pbBufrStart,
-						iBytesRead);
-			}
-
-		*(pstPrivate->pbBufrStart) = (char)-1;
-		pstComCntrl = (ST_COM_CONTROL *)pstPrivate->hCom;
-		pstComCntrl->puchRBData = pstPrivate->pbBufrStart;
-		pstComCntrl->puchRBDataLimit = pstPrivate->pbBufrStart;
-		return FALSE;
-		}
-		
-
-	// update the com handle with info on new data. This is implemented
-	// this way to allow HA to access these characters quickly
-	nBytesCopied = 0;
-	for (nIndx = 0; nIndx < iBytesRead; nIndx++)
-		{
-		int fTn3270;
-
-        if (pstPrivate->pbBufrStart == NULL)
-            {
-            return FALSE;
-            }
-
-		fTn3270 = WinSockIsTN3270(pstPrivate);
-
-		// If we have an FF or we are in the middle of a Telnet
-		// command, run this character thru the NVT.  Unless the
-		// says to discard the character, we then copy it to the
-		// output position.
-		if (pstPrivate->pbBufrStart[nIndx] == 0xFF ||
-            pstPrivate->NVTstate != NVT_THRU)
-			{
-			nNVTRes = WinSockNetworkVirtualTerminal(
-				(ECHAR) pstPrivate->pbBufrStart[nIndx],
-				(void far *) pstPrivate);
-			//DbgOutStr("NVT returns %d\n", nNVTRes, 0,0,0,0);		
-			}
-		else
-			nNVTRes = NVT_KEEP;
-
-		if (nNVTRes == NVT_EOR)
-			{
-			if (fTn3270 && pstPrivate->cbTn3270Record > 0)
-				{
-				HSESSION hSession;
-				HEMU hEmu;
-
-				if (ComGetSession(pstPrivate->hCom, &hSession) == COM_OK &&
-						hSession != 0)
-					{
-					hEmu = sessQueryEmuHdl(hSession);
-					if (hEmu)
-						emuTn3270RecordIn(hEmu,
-							pstPrivate->abTn3270Record,
-							pstPrivate->cbTn3270Record);
-					}
-				pstPrivate->cbTn3270Record = 0;
-				}
-			continue;
-			}
-		
-		if (nNVTRes != NVT_DISCARD)
-			{
-			if (fTn3270)
-				{
-				if (pstPrivate->cbTn3270Record <
-						(int)sizeof(pstPrivate->abTn3270Record))
-					pstPrivate->abTn3270Record[pstPrivate->cbTn3270Record++] =
-							pstPrivate->pbBufrStart[nIndx];
-				}
-			else
-				{
-				pstPrivate->pbBufrStart[nBytesCopied] = pstPrivate->pbBufrStart[nIndx];
-				nBytesCopied++;
-				}
-			}
-		}
+	nBytesCopied = WsckRouteReceivedBytes(pstPrivate, pstPrivate->pbBufrStart,
+			iBytesRead);
 
 	// if we got no data (perhaps because data were "eaten" by NVT),
 	// make sure we return -1
@@ -1207,20 +1602,10 @@ static int WinSockIsVideotex(ST_STDCOM *pstPrivate)
 	}
 #endif
 
-static int WinSockIsTN5250(ST_STDCOM *pstPrivate)
+static int WinSockIsIbm5250(ST_STDCOM *pstPrivate)
 	{
-	HSESSION hSession;
-	HEMU hEmu;
-
-	if (pstPrivate == NULL || pstPrivate->hCom == 0)
-		return FALSE;
-
-	if (ComGetSession(pstPrivate->hCom, &hSession) != COM_OK ||
-			hSession == 0)
-		return FALSE;
-
-	hEmu = sessQueryEmuHdl(hSession);
-	return (hEmu && emuQueryEmulatorId(hEmu) == EMU_TN5250) ? TRUE : FALSE;
+	HEMU hEmu = WsckQueryEmuHandle(pstPrivate);
+	return (hEmu && emuQueryEmulatorId(hEmu) == EMU_IBM5250) ? TRUE : FALSE;
 	}
 
 /* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -1253,7 +1638,7 @@ int WINAPI WsckRcvClear(void *pvPrivate)
 
 	// Do whatever is necessary to remove any buffered data from the com port
 
-	while (recv(pstPrivate->hSocket, ch, 128, 0) != SOCKET_ERROR)
+	while (WinSockRecvRaw(pstPrivate->hSocket, ch, 128, 0) != SOCKET_ERROR)
 			{
 			}
 
@@ -1294,8 +1679,10 @@ int WINAPI WsckSndBufrSend(void *pvPrivate, void *pvBufr, int  nBytesToSend)
   	unsigned char *pcThisPassData;
 	int		fGotFF = FALSE;	// TRUE if last char detected was an FF
 	int		nOffset;
-	LPSTR   puchRemains;
+	BYTE   *puchRemains;
 	int		fQueueing = FALSE;
+	const int fEscapeFF = pstPrivate->fEscapeFF &&
+			!WinSockIsIbm5250(pstPrivate);
 
 
 	assert(pvBufr != (VOID FAR *)0);
@@ -1326,7 +1713,7 @@ int WINAPI WsckSndBufrSend(void *pvPrivate, void *pvBufr, int  nBytesToSend)
 	ComNotify(pstPrivate->hCom, SEND_STARTED);						
 	while (nBytesToSend > 0 && usReturnValue == COM_OK)
 		{
-		if (pstPrivate->fEscapeFF)
+		if (fEscapeFF)
 			{
 			pcThisPassData = &pszPtr[nOffset];
 			
@@ -1382,7 +1769,7 @@ int WINAPI WsckSndBufrSend(void *pvPrivate, void *pvBufr, int  nBytesToSend)
 			{
 			// Pass data to TCP/IP
 			nCount = 0;
-			nCount = send(pstPrivate->hSocket,
+			nCount = WinSockSendRaw(pstPrivate->hSocket,
 							pcThisPassData,	(int)nSize,	0);
 								
 			// If we got a "would block" error, copy the data to send
@@ -1467,47 +1854,6 @@ int WINAPI WsckSndBufrSend(void *pvPrivate, void *pvBufr, int  nBytesToSend)
  * 	mcc 01/19/96 (from HAWIN)
  */
 
-int FAR PASCAL sndQueueAppend(ST_STDCOM* pstPrivate,
-						VOID FAR *pvBufr, int nBytesToAppend)
-						
-	{					
-	LPSTR	puchEnd;
-	USHORT  usReturns = COM_OK;
-
-	assert( pstPrivate != NULL );
-	assert( pvBufr != NULL );
-
-	//jkh 9/11/98 to avoid memcpy with invalid params
-	if ( pstPrivate && pvBufr && nBytesToAppend > 0 )
-		{
-		if (pstPrivate->nSendBufrLen + nBytesToAppend >
-				(int) sizeof(pstPrivate->abSndBufr))
-			{
-			DbgOutStr("SQAPP: buffer full", 0,0,0,0,0);
-			return COM_BUSY;
-			}
-	
-		// Set the flag that SndBufrIsBusy looks at; we are
-		// in the middle of a send until the buffer is cleared
-		// by WinSockWriteEvent
-		pstPrivate->fSending = TRUE;
-		
-		pstPrivate->pbSendBufr = pstPrivate->abSndBufr;			
-		puchEnd = pstPrivate->pbSendBufr + pstPrivate->nSendBufrLen;
-
-		DbgOutStr("sQA: appending %d bytes to addr = %lx.  Existing buffer is %d bytes at %lx\n",
-			nBytesToAppend,	puchEnd, pstPrivate->nSendBufrLen, pstPrivate->pbSendBufr,0);
-		pstPrivate->nSendBufrLen += nBytesToAppend;
-		MemCopy(puchEnd, (LPSTR) pvBufr, (unsigned) nBytesToAppend);
-		}
-
-	DbgOutStr("sQA: copy done\n", 0,0,0,0,0);
-	return usReturns;
-	}
-
-
-
-
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
  * FUNCTION: WsckSndBufrClear
  *
@@ -1576,24 +1922,24 @@ LRESULT FAR PASCAL WndSockWndProc(HWND hWnd, UINT uiMsg, WPARAM uiPar1, LPARAM l
 			/*
 			 * Initialize the Windows Socket DLL
 			 */
-			wVersion = 0x0101;			// The version of WinSock that we want
+			wVersion = MAKEWORD(2, 2);	// The version of WinSock that we want
 			if (WSAStartup(wVersion, &stWsaData) != 0)
 				{
 				/* No DLL was available */
+				pstPrivate->fConnected = 0;
+				ComNotify(pstPrivate->hCom, CONNECT);
 				return COM_DEVICE_ERROR;
 				}
 			DbgOutStr("Done calling WSAStartup\n", 0,0,0,0,0);
 		   //	pstPrivate->fActive = TRUE;
 
-			/* Confirm that the Windows Socket DLL supports 1.1. */
-			/* Note that if the DLL supports versions greater    */
-			/* than 1.1 in addition to 1.1, it will still return */
-			/* 1.1 in wVersion since that is the version we      */
-			/* requested                                         */
-			if ((LOBYTE(stWsaData.wVersion) != 1) &&
-				(HIBYTE(stWsaData.wVersion) != 1))
+			/* Confirm that the Windows Socket DLL supports Winsock 2.x. */
+			if (LOBYTE(stWsaData.wVersion) < 2)
 				{
 				/* No acceptable DLL was available */
+				WSACleanup();
+				pstPrivate->fConnected = 0;
+				ComNotify(pstPrivate->hCom, CONNECT);
 				return COM_DEVICE_ERROR;
 				}
 
@@ -1605,6 +1951,8 @@ LRESULT FAR PASCAL WndSockWndProc(HWND hWnd, UINT uiMsg, WPARAM uiPar1, LPARAM l
 			pstPrivate->hSocket = socket(PF_INET, SOCK_STREAM, 0);
 			if (pstPrivate->hSocket == INVALID_SOCKET)
 				{
+				pstPrivate->fConnected = 0;
+				ComNotify(pstPrivate->hCom, CONNECT);
 				return COM_DEVICE_ERROR;
 				}
 			DbgOutStr("Done calling socket\n", 0,0,0,0,0);
@@ -1612,14 +1960,26 @@ LRESULT FAR PASCAL WndSockWndProc(HWND hWnd, UINT uiMsg, WPARAM uiPar1, LPARAM l
 #ifdef INCL_CALL_ANSWERING			
             if (pstPrivate->fAnswer)
                 {
-			    WinSockAnswerSpecial(pstPrivate);
+			    if (WinSockAnswerSpecial(pstPrivate) != COM_OK)
+					{
+					pstPrivate->fConnected = 0;
+					ComNotify(pstPrivate->hCom, CONNECT);
+					}
                 }
             else
                 {
-			    WinSockConnectSpecial(pstPrivate);
+			    if (WinSockConnectSpecial(pstPrivate) != COM_OK)
+					{
+					pstPrivate->fConnected = 0;
+					ComNotify(pstPrivate->hCom, CONNECT);
+					}
                 }
 #else
-			WinSockConnectSpecial(pstPrivate);
+			if (WinSockConnectSpecial(pstPrivate) != COM_OK)
+				{
+				pstPrivate->fConnected = 0;
+				ComNotify(pstPrivate->hCom, CONNECT);
+				}
 #endif
 			break;
 			
@@ -1695,7 +2055,7 @@ BOOL WinSockCreateEventWindow (ST_STDCOM *pstPrivate)
 		{
 		pstPrivate->hwndEvents = CreateWindow(
 										WINSOCK_EVENT_WINDOW_CLASS,
-										"",
+										L"",
 										WS_OVERLAPPEDWINDOW,
 										0, 0, 0, 0,
 										HWND_DESKTOP,
@@ -1736,7 +2096,7 @@ VOID WinSockSendBreak(ST_STDCOM*pstPrivate)
 
 	acSendBreak[0] = 255;
 	acSendBreak[1] = 243;
-	send(pstPrivate->hSocket, acSendBreak, 2, 0);
+	WinSockSendRaw(pstPrivate->hSocket, acSendBreak, 2, 0);
 	}
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -1763,10 +2123,10 @@ USHORT WinSockSendBreakSpecial(ST_STDCOM *pstPrivate,
 		}
 
 	return 0;
-	} /*lint !e715 */
+	} // lint !e715
 
-/*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
- * FUNCTION:
+	/*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+	 * FUNCTION:
  *
  * DESCRIPTION:
  *
@@ -1803,7 +2163,9 @@ int WinSockConnectSpecial(ST_STDCOM*pstPrivate)
 	// See if the remote address has been entered in numeric form.  If not,
 	// we will have to call WSAAsynchGetHostByName to translate it; in that
 	// case, the EventWindow handler will call connect.
-	ulAddr = inet_addr(pstPrivate->szRemoteAddr);
+	WsckWideToHostNameA(pstPrivate->szRemoteAddr, pstPrivate->szRemoteAddrA,
+		sizeof(pstPrivate->szRemoteAddrA));
+	ulAddr = inet_addr(pstPrivate->szRemoteAddrA);
 	if ((ulAddr == INADDR_NONE) || (ulAddr == 0))
 		{
 		DbgOutStr("WSCnctSp: calling WSA...HostByName\n", 0,0,0,0,0);
@@ -1811,7 +2173,7 @@ int WinSockConnectSpecial(ST_STDCOM*pstPrivate)
 		hReturn = WSAAsyncGetHostByName(
 							pstPrivate->hwndEvents,
 							WM_WINSOCK_RESOLVE,
-							pstPrivate->szRemoteAddr,
+							pstPrivate->szRemoteAddrA,
 							(char *) &pstPrivate->stHostBuf,
 							MAXGETHOSTSTRUCT);
 		
@@ -1865,6 +2227,7 @@ WSCSexit:
 	if (usRetVal != COM_OK)
 		{
 	   closesocket(pstPrivate->hSocket);
+	   pstPrivate->hSocket = INVALID_SOCKET;
 		}
 
 	return usRetVal;
@@ -1961,10 +2324,10 @@ USHORT WinSockDisconnectSpecial(ST_STDCOM*pstPrivate,
 	pstPrivate->fConnected = 0;
 
 	return COM_OK;
-	} /*lint !e715 */
+	} lint !e715
 
-/*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
- * FUNCTION:
+	 * -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+	 * FUNCTION:
  *
  * DESCRIPTION:
  *
@@ -2005,9 +2368,26 @@ LONG WinSockConnectEvent(ST_STDCOM*pstPrivate, LPARAM lPar)
 		}
 	else
 		{
-		pstPrivate->fConnected = 1;
-		WinSockMaybeStartTN3270(pstPrivate);
-		ComNotify(pstPrivate->hCom, CONNECT);
+        pstPrivate->fConnected = 1;
+        /* Implicit TLS begins as soon as TCP connects.  Explicit StartTLS must
+         * first negotiate the Telnet START_TLS option in the plain stream. */
+        if (pstPrivate->fImplicitTlsRequested &&
+            !(pstPrivate->fStartTlsActive || pstPrivate->fImplicitTlsActive))
+            {
+            if (WsckStartTls(pstPrivate) < 0)
+                {
+                pstPrivate->fStartTlsRequested = 0;
+                pstPrivate->fImplicitTlsRequested = 0;
+                }
+            }
+        else if (pstPrivate->fStartTlsRequested)
+            {
+            WinSockRequestStartTls(pstPrivate);
+            }
+        if (!pstPrivate->fStartTlsRequested ||
+            pstPrivate->fStartTlsActive || pstPrivate->fImplicitTlsActive)
+            WinSockMaybeStartIbm3270Telnet(pstPrivate);
+        ComNotify(pstPrivate->hCom, CONNECT);
 		}
 	return 0;
 	}	/*lint !e715 */
@@ -2045,14 +2425,25 @@ LONG WinSockAcceptEvent(ST_STDCOM*pstPrivate, LPARAM lPar)
 	if (hAnswer != INVALID_SOCKET)
 		{
         // Now we are connected.
-        //
-		pstPrivate->fConnected = 1;
-
-        // Get the newly accepted socket.
-        //
-		hOldSocket = pstPrivate->hSocket;
-		pstPrivate->hSocket = hAnswer;
-		WinSockMaybeStartTN3270(pstPrivate);
+        pstPrivate->fConnected = 1;
+        hOldSocket = pstPrivate->hSocket;
+        pstPrivate->hSocket = hAnswer;
+        if (pstPrivate->fImplicitTlsRequested &&
+            !(pstPrivate->fStartTlsActive || pstPrivate->fImplicitTlsActive))
+            {
+            if (WsckStartTls(pstPrivate) < 0)
+                {
+                pstPrivate->fStartTlsRequested = 0;
+                pstPrivate->fImplicitTlsRequested = 0;
+                }
+            }
+        else if (pstPrivate->fStartTlsRequested)
+            {
+            WinSockRequestStartTls(pstPrivate);
+            }
+        if (!pstPrivate->fStartTlsRequested ||
+            pstPrivate->fStartTlsActive || pstPrivate->fImplicitTlsActive)
+            WinSockMaybeStartIbm3270Telnet(pstPrivate);
 
         // Now close the old socket because we don't want to
         // be listening when we are connected.
@@ -2130,7 +2521,7 @@ LONG WinSockWriteEvent(ST_STDCOM *pstPrivate, LPARAM lPar)
 		//  while we send it.  OK, I think, since send won't block.
 	    EnterCriticalSection(&pstPrivate->csect);
 
-		nCount = send(pstPrivate->hSocket,
+		nCount = WinSockSendRaw(pstPrivate->hSocket,
 								pstPrivate->pbSendBufr,
 								(int)pstPrivate->nSendBufrLen,
 								0);
@@ -2270,96 +2661,6 @@ LONG WinSockResolveEvent(ST_STDCOM *pstPrivate, LPARAM lPar)
 	return 0;
 	}
 	
-	
-/*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
- * FUNCTION:
- *	WinSockSendMessage
- *
- * DESCRIPTION:
- *	Used to send a Telnet option message. This calls send() directly so
- *	that data can go out while SndBufrSend is reporting COM_BUSY.
- *
- * PARAMETERS:
- *	pstPrivate		Com driver private data
- *	nMsg			The message number , e.g. DO, WILL, WONT, (see comwsock.hh)
- *	nChar			The message data, e.g. TELOPT_BINARY (see comwsock.hh)
- *
- * RETURNS:
- *	void
- *
- * AUTHOR
- *	mcc 02/06/96
- */
-VOID WinSockSendMessage(ST_STDCOM * pstPrivate, INT nMsg, INT nChar)
-    {
-	unsigned char 	acMsg[3];
-
-#if defined(_DEBUG)
-	char *nNames[] = {"WILL", "WONT", "DO", "DONT"};
-	assert( nMsg >= WILL && nMsg <= DONT );
-	DbgOutStr("Send %s: %lx\r\n", nNames[nMsg - WILL], nChar,0,0,0);
-#endif
-	acMsg[0] = IAC;
-	acMsg[1] = (UCHAR) nMsg;
-	acMsg[2] = (UCHAR) nChar;
-			
-	
-	WinSockSendBuffer(pstPrivate, 3, acMsg);
-	
-	}
-
-/*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
- * FUNCTION:
- *	WinSockSendBuffer
- *
- * DESCRIPTION:
- *	Used to send an arbitrary string of data (e.g., a terminal type)
- *  during Telnet option negotiation
- *
- * PARAMETERS:
- *	pstPrivate		Winsock Com driver private data
- *	nSize			Number of bytes to send
- *	pszBuffer		Pointer to data to send
- *
- * RETURNS:
- *	void
- *
- * AUTHOR
- *	mcc 02/06/96
- */
-VOID WinSockSendBuffer(ST_STDCOM * pstPrivate, INT nSize, LPSTR pszBuffer)
-	{
-	int nCount, nError;
-	
-	nCount = send(pstPrivate->hSocket, pszBuffer, nSize,0);
-						
-	if (nCount == SOCKET_ERROR)
-		{								
-		nError = WSAGetLastError();
-
-		if (nError == WSAEWOULDBLOCK)
-			{
-			DbgOutStr("WSSB would block.  Queueing %d bytes\n",
-				nSize,0,0,0,0);
-			if (sndQueueAppend(pstPrivate,pszBuffer, nSize) != COM_OK)
-				ComNotify(pstPrivate->hCom, CONNECT);
-			}
-		else
-			ComNotify(pstPrivate->hCom, CONNECT);
-		
-		}
-	else
-		{
-		int i;
-		DbgOutStr("%4d >> ", nCount,0,0,0,0);
-    	for (i = 0; i < nCount; i++)
-    	DbgOutStr("%x ", pszBuffer[i],0,0,0,0);
-		DbgOutStr("\n", 0,0,0,0,0);	
-		}	
-	}
-
-	
-
 #endif
 
 
@@ -2410,7 +2711,7 @@ int WINAPI WsckPortActivate(void *pvPrivate,
 	/*
 	 * Initialize the Windows Socket DLL
 	 */
-	wVersion = 0x0101;			// The version of WinSock that we want
+	wVersion = MAKEWORD(2, 2);	// The version of WinSock that we want
 	if (WSAStartup(wVersion, &stWsaData) != 0)
 		{
 		/* No DLL was available */
@@ -2419,15 +2720,11 @@ int WINAPI WsckPortActivate(void *pvPrivate,
 		}
 	DbgOutStr("Done calling WSAStartup\n", 0,0,0,0,0);
 
-	/* Confirm that the Windows Socket DLL supports 1.1. */
-	/* Note that if the DLL supports versions greater    */
-	/* than 1.1 in addition to 1.1, it will still return */
-	/* 1.1 in wVersion since that is the version we      */
-	/* requested                                         */
-	if ((LOBYTE(stWsaData.wVersion) != 1) &&
-		(HIBYTE(stWsaData.wVersion) != 1))
+	/* Confirm that the Windows Socket DLL supports Winsock 2.x. */
+	if (LOBYTE(stWsaData.wVersion) < 2)
 		{
 		/* No acceptable DLL was available */
+		WSACleanup();
 		iRetVal = COM_DEVICE_ERROR;
         goto checkout;
 		}
@@ -2473,6 +2770,7 @@ int WINAPI WsckPortActivate(void *pvPrivate,
     pstPrivate->pbReadEnd = pstPrivate->pbBufrStart;
     pstPrivate->pbComStart = pstPrivate->pbComEnd = pstPrivate->pbBufrStart;
     pstPrivate->fBufrEmpty = TRUE;
+	pstPrivate->nSendBufrLen = 0;
 
 
     if (iRetVal == COM_OK)
@@ -2485,6 +2783,7 @@ int WINAPI WsckPortActivate(void *pvPrivate,
         pstPrivate->dwEventMask = EV_ERR | EV_RLSD;
         pstPrivate->fNotifyRcv = TRUE;
         pstPrivate->fBufrEmpty = TRUE;
+		WinSockCreateNVT(pstPrivate);
 
 
         // Start thread to handle Reading, Writing (& 'rithmetic) & events
@@ -2521,10 +2820,31 @@ int WINAPI WsckPortActivate(void *pvPrivate,
 		if ( iRetVal == COM_OK )
 			{
 			pstPrivate->fConnected = TRUE;
+			if (pstPrivate->fImplicitTlsRequested &&
+					!(pstPrivate->fStartTlsActive ||
+					pstPrivate->fImplicitTlsActive))
+				{
+				if (WsckStartTls(pstPrivate) < 0)
+					{
+					pstPrivate->fStartTlsRequested = 0;
+					pstPrivate->fImplicitTlsRequested = 0;
+					}
+				}
+			else if (pstPrivate->fStartTlsRequested)
+				{
+				WinSockRequestStartTls(pstPrivate);
+				}
+			if (!pstPrivate->fStartTlsRequested ||
+					pstPrivate->fStartTlsActive ||
+					pstPrivate->fImplicitTlsActive)
+				{
+				WinSockMaybeStartIbm3270Telnet(pstPrivate);
+				}
 			// Turn loose the read thread
 			DbgOutStr("connect OK", 0,0,0,0,0);
 			SetEvent(pstPrivate->ahEvent[EVENT_READ]);
 			SetEvent(pstPrivate->ahEvent[EVENT_WRITE]);
+			ComNotify(pstPrivate->hCom, CONNECT);
 			}
 		else
 			{
@@ -2564,29 +2884,39 @@ int WINAPI WsckPortDeactivate(void *pvPrivate)
 	ST_STDCOM *pstPrivate = (ST_STDCOM *) pvPrivate;
     int iRetVal = COM_OK;
 
+	pstPrivate->fHaltThread = TRUE;
+	if (pstPrivate->hSocket != INVALID_SOCKET)
+		{
+		shutdown(pstPrivate->hSocket, 2);
+		closesocket(pstPrivate->hSocket);
+		pstPrivate->hSocket = INVALID_SOCKET;
+		}
 
+	WsckFreeTls(pstPrivate);
+	SetEvent(pstPrivate->ahEvent[EVENT_READ]);
+	SetEvent(pstPrivate->ahEvent[EVENT_WRITE]);
 
-	
 	if (pstPrivate->hComReadThread || pstPrivate->hComWriteThread)
         {
-        // Halt the thread by setting a flag for the thread to detect and then
-        // forcing WaitCommEvent to return by changing the event mask
         DBG_THREAD("DBG_THREAD: Shutting down ComWinsock thread\r\n", 0,0,0,0,0);
-        pstPrivate->fHaltThread = TRUE;
 
-        // Read thread should exit now, it's handle will signal when it has exited
-        CloseHandle(pstPrivate->hComReadThread);
-		WaitForSingleObject(pstPrivate->hComReadThread, 5000);
+		if (pstPrivate->hComReadThread)
+			{
+			WaitForSingleObject(pstPrivate->hComReadThread, 5000);
+			CloseHandle(pstPrivate->hComReadThread);
+			pstPrivate->hComReadThread = NULL;
+			DBG_THREAD("DBG_THREAD: ComWinsock thread has shut down\r\n",
+					0,0,0,0,0);
+			}
 
-        pstPrivate->hComReadThread = NULL;
-        DBG_THREAD("DBG_THREAD: ComWinsock thread has shut down\r\n", 0,0,0,0,0);
-
-		// Write thread should exit now, it's handle will signal when it has exited
-        CloseHandle(pstPrivate->hComWriteThread);
-		WaitForSingleObject(pstPrivate->hComWriteThread, 5000);
-
-        pstPrivate->hComWriteThread = NULL;
-        DBG_THREAD("DBG_THWrite: ComWriteThread has shut down\r\n", 0,0,0,0,0);
+		if (pstPrivate->hComWriteThread)
+			{
+			WaitForSingleObject(pstPrivate->hComWriteThread, 5000);
+			CloseHandle(pstPrivate->hComWriteThread);
+			pstPrivate->hComWriteThread = NULL;
+			DBG_THREAD("DBG_THWrite: ComWriteThread has shut down\r\n",
+					0,0,0,0,0);
+			}
 		}
 
     if (pstPrivate->pbBufrStart)
@@ -2595,14 +2925,12 @@ int WINAPI WsckPortDeactivate(void *pvPrivate)
         pstPrivate->pbBufrStart = NULL;
         }
 
-
-	// Shut down socket and WINSOCK
-	closesocket(pstPrivate->hSocket);
-
-
 	WSACleanup();
 
-	pstPrivate->hSocket = INVALID_SOCKET;
+	pstPrivate->fIbm3270Mode = FALSE;
+	pstPrivate->fIbm3270E = FALSE;
+	pstPrivate->fIbm3270EReady = FALSE;
+	pstPrivate->cbIbm3270Record = 0;
 
     return iRetVal;
     }
@@ -2633,35 +2961,57 @@ int WINAPI WsckRcvRefill(void *pvPrivate)
     int fRetVal = FALSE;
     ST_COM_CONTROL *pstComCntrl;
 
-    EnterCriticalSection(&pstPrivate->csect);
+    for (;;)
+		{
+		BYTE *pbChunkStart;
+		BYTE *pbChunkEnd;
+		int cbChunk;
+		int cbRouted;
 
-    pstPrivate->pbComStart = (pstPrivate->pbComEnd == pstPrivate->pbBufrEnd) ?
-        pstPrivate->pbBufrStart : pstPrivate->pbComEnd;
-    pstPrivate->pbComEnd = (pstPrivate->pbReadEnd >= pstPrivate->pbComStart) ?
-        pstPrivate->pbReadEnd : pstPrivate->pbBufrEnd;
-    DBG_READ("DBG_READ: Refill ComStart==%x, ComEnd==%x (ReadEnd==%x)\r\n",
-        pstPrivate->pbComStart, pstPrivate->pbComEnd,
-        pstPrivate->pbReadEnd, 0,0);
-    if (pstPrivate->fBufrFull)
-        {
-        DBG_READ("DBG_READ: Refill Signalling EVENT_READ\r\n", 0,0,0,0,0);
-        SetEvent(pstPrivate->ahEvent[EVENT_READ]);
-        }
-    if (pstPrivate->pbComStart == pstPrivate->pbComEnd)
-        {
-        DBG_READ("DBG_READ: Refill setting fBufrEmpty = TRUE\r\n", 0,0,0,0,0);
-        pstPrivate->fBufrEmpty = TRUE;
-        ComNotify(pstPrivate->hCom, NODATA);
-        }
-    else
-        {
-        pstComCntrl = (ST_COM_CONTROL *)pstPrivate->hCom;
-        pstComCntrl->puchRBData = pstPrivate->pbComStart;
-        pstComCntrl->puchRBDataLimit = pstPrivate->pbComEnd;
-        fRetVal = TRUE;
-        }
+		EnterCriticalSection(&pstPrivate->csect);
 
-    LeaveCriticalSection(&pstPrivate->csect);
+		pstPrivate->pbComStart = (pstPrivate->pbComEnd == pstPrivate->pbBufrEnd) ?
+			pstPrivate->pbBufrStart : pstPrivate->pbComEnd;
+		pstPrivate->pbComEnd = (pstPrivate->pbReadEnd >= pstPrivate->pbComStart) ?
+			pstPrivate->pbReadEnd : pstPrivate->pbBufrEnd;
+		DBG_READ("DBG_READ: Refill ComStart==%x, ComEnd==%x (ReadEnd==%x)\r\n",
+			pstPrivate->pbComStart, pstPrivate->pbComEnd,
+			pstPrivate->pbReadEnd, 0,0);
+		if (pstPrivate->fBufrFull)
+			{
+			DBG_READ("DBG_READ: Refill Signalling EVENT_READ\r\n", 0,0,0,0,0);
+			SetEvent(pstPrivate->ahEvent[EVENT_READ]);
+			}
+		if (pstPrivate->pbComStart == pstPrivate->pbComEnd)
+			{
+			DBG_READ("DBG_READ: Refill setting fBufrEmpty = TRUE\r\n",
+					0,0,0,0,0);
+			pstPrivate->fBufrEmpty = TRUE;
+			LeaveCriticalSection(&pstPrivate->csect);
+			ComNotify(pstPrivate->hCom, NODATA);
+			break;
+			}
+
+		pbChunkStart = pstPrivate->pbComStart;
+		pbChunkEnd = pstPrivate->pbComEnd;
+		cbChunk = (int)(pbChunkEnd - pbChunkStart);
+		LeaveCriticalSection(&pstPrivate->csect);
+
+		cbRouted = WsckRouteReceivedBytes(pstPrivate, pbChunkStart, cbChunk);
+
+		EnterCriticalSection(&pstPrivate->csect);
+		pstComCntrl = (ST_COM_CONTROL *)pstPrivate->hCom;
+		pstComCntrl->puchRBData = pbChunkStart;
+		pstComCntrl->puchRBDataLimit = pbChunkStart + cbRouted;
+		if (cbRouted > 0)
+			{
+			fRetVal = TRUE;
+			LeaveCriticalSection(&pstPrivate->csect);
+			break;
+			}
+		LeaveCriticalSection(&pstPrivate->csect);
+		}
+
     return fRetVal;
     }
 
@@ -2729,6 +3079,11 @@ int WINAPI WsckSndBufrSend(void *pvPrivate, void *pvBufr, int  nSize)
 	ST_STDCOM *pstPrivate = (ST_STDCOM *) pvPrivate;
     int  iRetVal = COM_OK;
 	int  iCode;
+	const BYTE *pbSource = (const BYTE *)pvBufr;
+	int cbQueued = 0;
+	int nIndx;
+	const int fEscapeFF = pstPrivate->fEscapeFF &&
+			!WinSockIsIbm5250(pstPrivate);
 
     assert(pvBufr != (void *)0);
     assert(nSize <= WSOCK_SIZE_OUTQ);
@@ -2742,8 +3097,22 @@ int WINAPI WsckSndBufrSend(void *pvPrivate, void *pvBufr, int  nSize)
         {
         ComNotify(pstPrivate->hCom, SEND_STARTED);
         EnterCriticalSection(&pstPrivate->csect);
-		pstPrivate->pbSendBufr = pvBufr;
-		pstPrivate->nSendBufrLen = nSize;
+		if (fEscapeFF)
+			{
+			for (nIndx = 0; nIndx < nSize; nIndx++)
+				{
+				pstPrivate->abSndBufr[cbQueued++] = pbSource[nIndx];
+				if (pbSource[nIndx] == 0xFF)
+					pstPrivate->abSndBufr[cbQueued++] = 0xFF;
+				}
+			}
+		else
+			{
+			MemCopy(pstPrivate->abSndBufr, pvBufr, (unsigned)nSize);
+			cbQueued = nSize;
+			}
+		pstPrivate->pbSendBufr = pstPrivate->abSndBufr;
+		pstPrivate->nSendBufrLen = cbQueued;
 		pstPrivate->fSending = TRUE;
 
 
@@ -2820,7 +3189,7 @@ DWORD  WINAPI WsckComWriteThread(void *pvData)
 	unsigned		uSize, nBytesToSend, nBytesSent;
 	int				fRunning = TRUE;
 	DWORD			iResult = COM_OK;
-	char			*pchData;
+	BYTE			*pchData;
 	int				iCode;
 
 
@@ -2868,7 +3237,7 @@ DWORD  WINAPI WsckComWriteThread(void *pvData)
 					uSize = nBytesToSend - nBytesSent;
 					LeaveCriticalSection(&pstPrivate->csect);
 					assert(uSize > 0 && uSize < 32767);
-					nBytesWritten = send(pstPrivate->hSocket,
+					nBytesWritten = WinSockSendRaw(pstPrivate->hSocket,
 						pchData,(int) uSize, 0);
 					DbgOutStr("WriteThrd: %d bytes of %d sent. 1st 3 = %x %x %x\n",
 							nBytesWritten, uSize, pchData[0], pchData[1], pchData[2]);
@@ -2951,11 +3320,10 @@ DWORD  WINAPI WsckComReadThread(void *pvData)
 	ST_STDCOM			*pstPrivate =  (ST_STDCOM *)pvData;
 	int					fRunning = TRUE;
 	int					fReading = TRUE;
-	char				*pbReadFrom, *pOut;
+	BYTE				*pbReadFrom;
 	unsigned			nReadSize;
-	long				lBytesRead, nFFs;
+	long				lBytesRead;
 	int					iResult;
-	int					nIndx;
 	DWORD				rc;
 
 
@@ -3030,7 +3398,7 @@ DWORD  WINAPI WsckComReadThread(void *pvData)
                 else
                     {
 					DBG_READ("ReadThread posting a recv\n", 0,0,0,0,0);
-					lBytesRead = recv(pstPrivate->hSocket, pbReadFrom,
+					lBytesRead = WinSockRecvRaw(pstPrivate->hSocket, pbReadFrom,
 													  (int)nReadSize, 0);
                     if (lBytesRead > 0)
                         {
@@ -3049,48 +3417,6 @@ DWORD  WINAPI WsckComReadThread(void *pvData)
                             pstPrivate->fBufrEmpty = FALSE;
                             ComNotify(pstPrivate->hCom, DATA_RECEIVED);
                             }
-
-						if (pstPrivate->fEscapeFF)
-							{
-							// The sender escaped FF characters by doubling
-							// them.  Copy the received data buffer onto itself,
-							// skipping every other FF
-							pOut = pbReadFrom;
-							nFFs = 0;
-							for (nIndx = 0; nIndx < lBytesRead; nIndx += 1)
-								{
-								if (pstPrivate->fSeenFF)
-									{
-									if (pbReadFrom[nIndx] == 0xFF)
-										{
-										// Skip this one
-										nFFs++;
-										}
-									else
-										{
-										// This should not happen, but copy
-										// anyway
-										*pOut = pbReadFrom[nIndx];
-										pOut++;
-										}
-									pstPrivate->fSeenFF = FALSE;
-									}
-								else
-									{
-									// Test to see if this is an FF; copy
-									// input to output.
-									if (pbReadFrom[nIndx] == 0xFF)
-										{
-										pstPrivate->fSeenFF = TRUE;
-										}
-									*pOut = pbReadFrom[nIndx];
-									pOut++;
-									}
-								}
-							// Decrement the number of bytes read by the
-							// number of duplicate FF's we tossed.
-							lBytesRead -= nFFs;
-							}
 
 						// Notify application that we got some data
 						// if buffer had been empty
@@ -3177,6 +3503,7 @@ int wsckResolveAddress(WCHAR *pszRemote, unsigned long *pulAddr)
 	{
 	int				iRetVal = COM_NOT_FOUND;
 	struct hostent  *pstHost;
+	char			szRemoteA[IP_ADDR_LEN];
 
 	assert(pszRemote);
 	assert(pulAddr);
@@ -3187,12 +3514,13 @@ int wsckResolveAddress(WCHAR *pszRemote, unsigned long *pulAddr)
 		// Convert pszRemote to an internet address.  If not successful,
 		// assume that the string is a host NAME and try to turn
 		// that into an address
-		*pulAddr = inet_addr(pszRemote);
+		WsckWideToHostNameA(pszRemote, szRemoteA, sizeof(szRemoteA));
+		*pulAddr = inet_addr(szRemoteA);
 		if ((*pulAddr == INADDR_NONE) || (*pulAddr == 0))
 			{
 			// If not a valid network address, it should be a name, so
 			// look that up (in the hosts file or via a name server)
-			pstHost = gethostbyname(pszRemote);
+			pstHost = gethostbyname(szRemoteA);
 			if ( pstHost)
 				*pulAddr = *((unsigned long *)pstHost->h_addr);
 			}

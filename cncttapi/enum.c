@@ -354,7 +354,8 @@ int EnumerateCountryCodes(const HHDRIVER hhDriver, const HWND hwndCB)
         {
         // Format so country name is first.
         //
-        wsprintf(ach, "%s (%d)", (BYTE *)pcl + pce->dwCountryNameOffset,
+        wsprintfW(ach, L"%ls (%lu)",
+			(LPCWSTR)((BYTE *)pcl + pce->dwCountryNameOffset),
             pce->dwCountryCode);
 
         // Add to combo box
@@ -859,7 +860,7 @@ int EnumerateLinesNT(const HHDRIVER hhDriver, const HWND hwndCB)
     /* --- Initialize stuff --- */
 
     pLnDevCaps = 0;
-    if ( StrCharCmp(hhDriver->achLineName, "") == 0 )
+    if ( StrCharCmp(hhDriver->achLineName, L"") == 0 )
         {
         hhDriver->dwLine = (DWORD)-1;
         }
@@ -874,8 +875,8 @@ int EnumerateLinesNT(const HHDRIVER hhDriver, const HWND hwndCB)
 
     for (i = 0 ; i < hhDriver->dwLineCnt ; ++i)
     	{
-    	if (retval = lineNegotiateAPIVersion(hhDriver->hLineApp, i, TAPI_VER,
-    			TAPI_VER, &dwAPIVersion, &LnExtId) != 0)
+	if ((retval = lineNegotiateAPIVersion(hhDriver->hLineApp, i, TAPI_VER,
+			TAPI_VER, &dwAPIVersion, &LnExtId)) != 0)
     		{
             // Could be a 1.3 driver, we continue.
     		continue;
@@ -1406,7 +1407,7 @@ int cnctdrvGetComSettingsString(const HHDRIVER hhDriver, LPWSTR pachStr,
     	ComGetParity(hCom, &iParity);
     	ComGetStopBits(hCom, &iStopBits);
 
-    	wsprintf(ach, "%ld %d-%c-%s", lBaud, iDataBits,
+	wsprintfW(ach, L"%ld %d-%c-%ls", lBaud, iDataBits,
     			acParity[iParity], pachStop[iStopBits]);
     	}
 
@@ -1456,7 +1457,7 @@ int cnctdrvGetComSettingsString(const HHDRIVER hhDriver, LPWSTR pachStr,
 				iStopBits = ONESTOPBIT;
             }
 
-		wsprintf(ach, "%ld %d-%c-%s", lBaud, iDataBits,
+		wsprintfW(ach, L"%ld %d-%c-%ls", lBaud, iDataBits,
                  acParity[iParity], pachStop[iStopBits]);
     	}
 
@@ -1494,14 +1495,14 @@ int cnctdrvGetComSettingsString(const HHDRIVER hhDriver, LPWSTR pachStr,
  *	dw
  *
  */
-DWORD tapiTrap(const DWORD dw, const WCHAR *file, const int line)
+DWORD tapiTrap(const DWORD dw, const char *file, const int line)
     {
     char ach[256];
 
     if (dw != 0)
     	{
-    	wsprintf(ach, "TAPI returned %x on line %d of file %s", dw, line, file);
-    	MessageBox(GetFocus(), ach, "TAPI Trap", MB_OK | MB_ICONINFORMATION);
+	wsprintfA(ach, "TAPI returned %lx on line %d of file %s", dw, line, file);
+	MessageBoxA(GetFocus(), ach, "TAPI Trap", MB_OK | MB_ICONINFORMATION);
     	}
 
     return dw;

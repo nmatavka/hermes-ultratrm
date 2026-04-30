@@ -138,12 +138,12 @@ int std_kbdin(const HHEMU hhEmu, int kcode, const int fTest)
     //
     else if (kcode == KeyBreak || kcode == KeyExtBreak || kcode == KeyBreakNT)
         {
-		ComDriverSpecial(sessQueryComHdl(hhEmu->hSession), "Send Break", 0, 0);
+		ComDriverSpecial(sessQueryComHdl(hhEmu->hSession), L"Send Break", 0, 0);
 		return -1;
 		}
 	else if (kcode == KeyAltBreak)
 		{
-		ComDriverSpecial(sessQueryComHdl(hhEmu->hSession), "Send IP", 0, 0);
+		ComDriverSpecial(sessQueryComHdl(hhEmu->hSession), L"Send IP", 0, 0);
 		return -1;
         }
     //
@@ -1074,7 +1074,7 @@ void std_setscrsize(const HHEMU hhEmu)
 	// Telnet has a negotiated option to let the server know whenever the
 	// terminal size changes. In case it has been enabled, we must let
 	// the com driver know about this change.
-	ComDriverSpecial(sessQueryComHdl(hhEmu->hSession), "Update Terminal Size", 0, 0);
+	ComDriverSpecial(sessQueryComHdl(hhEmu->hSession), L"Update Terminal Size", 0, 0);
 
     return;
     }

@@ -91,26 +91,26 @@ struct stXferData
 	/*
 	 * First, we have the bit flags indicating which fields have changed
 	 */
-	int		bChecktype		: 1;
-	int		bErrorCnt		: 1;
-	int		bPcktErrCnt		: 1;
-	int		bLastErrtype	: 1;
-	int		bTotalSize		: 1;
-	int		bTotalSoFar		: 1;
-	int		bFileSize		: 1;
-	int		bFileSoFar		: 1;
-	int		bPacketNumber	: 1;
-	int		bTotalCnt		: 1;
-	int		bFileCnt		: 1;
-	int		bEvent			: 1;
-	int		bStatus			: 1;
-	int		bElapsedTime	: 1;
-	int		bRemainingTime	: 1;
-	int		bThroughput		: 1;
-	int		bProtocol		: 1;
-	int		bMessage		: 1;
-	int		bOurName		: 1;
-	int		bTheirName		: 1;
+	unsigned int		bChecktype		: 1;
+	unsigned int		bErrorCnt		: 1;
+	unsigned int		bPcktErrCnt		: 1;
+	unsigned int		bLastErrtype	: 1;
+	unsigned int		bTotalSize		: 1;
+	unsigned int		bTotalSoFar		: 1;
+	unsigned int		bFileSize		: 1;
+	unsigned int		bFileSoFar		: 1;
+	unsigned int		bPacketNumber	: 1;
+	unsigned int		bTotalCnt		: 1;
+	unsigned int		bFileCnt		: 1;
+	unsigned int		bEvent			: 1;
+	unsigned int		bStatus			: 1;
+	unsigned int		bElapsedTime	: 1;
+	unsigned int		bRemainingTime	: 1;
+	unsigned int		bThroughput		: 1;
+	unsigned int		bProtocol		: 1;
+	unsigned int		bMessage		: 1;
+	unsigned int		bOurName		: 1;
+	unsigned int		bTheirName		: 1;
 
 	/*
 	 * Then, we have the data fields themselves

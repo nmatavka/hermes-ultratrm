@@ -235,7 +235,7 @@ STATIC_FUNC void prop_WM_INITDIALOG_General(HWND hDlg)
 
 	// Display the type... TODO
 	//
-	SetDlgItemText(hDlg, IDC_TF_TYPE, L"Wacker Connection");
+	SetDlgItemTextW(hDlg, IDC_TF_TYPE, L"UltraTerminal Session");
 
 	// Display the file size... TODO
 	//
@@ -250,7 +250,7 @@ STATIC_FUNC void prop_WM_INITDIALOG_General(HWND hDlg)
 
 	// Display the location... TODO
 	//
-	SetDlgItemText(hDlg, IDC_TF_LOCA, L"Wacker Folder");
+	SetDlgItemTextW(hDlg, IDC_TF_LOCA, L"UltraTerminal Folder");
 
 	// Display the MS-DOS name... TODO
 	//

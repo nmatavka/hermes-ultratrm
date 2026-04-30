@@ -117,13 +117,13 @@
 // obvious cut-and-paste job, I have changed this to be unique for
 // UltraTerminal. - cab:12/06/96
 //
-#define	WINSOCK_EVENT_WINDOW_CLASS	"UltraTerminal/WinSock"
+#define	WINSOCK_EVENT_WINDOW_CLASS	L"UltraTerminal/WinSock"
 
 #define	WM_WINSOCK_NOTIFY	(WM_USER+133)
 #define	WM_WINSOCK_RESOLVE	(WM_USER+134)
 #define WM_WINSOCK_STARTUP  (WM_USER+135)
 
-#define MODE_MAX    7
+#define MODE_MAX    8
 #endif  // defined(INCL_WINSOCK)
 
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-= TYPES =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -222,6 +222,7 @@ typedef struct s_stdcom
 	SOCKET          hSocket;            // connected socket
 	int             fConnected;         // -1 initially, 0 if init'd, 1 connected
 	WCHAR           szRemoteAddr[IP_ADDR_LEN];// IP address
+	char            szRemoteAddrA[IP_ADDR_LEN];// ANSI hostname for legacy Winsock APIs
 	short           nPort;              // Port number
 	unsigned long   ulCompatibility;    // to pass flags into dialogs
 
@@ -241,7 +242,26 @@ typedef struct s_stdcom
     HANDLE  hComConnectThread;      // Thread to handle connecting to host
 	int		fClearSendBufr;			// flag to signal send buffer to be cleared
 	int		fEscapeFF;				// We are escaping FF characters (by doubling)
-	int		fSeenFF;				// We have just encountered and FF character
+    int		fSeenFF;				// We have just encountered and FF character
+
+    /*
+     * StartTLS control fields for the winsock driver.
+     *
+     * When the Telnet START_TLS option is negotiated the connection is
+     * upgraded to TLS on the existing socket.  If fStartTlsRequested is
+     * non-zero the client advertises STARTTLS and attempts to upgrade the
+     * connection.  On successful TLS negotiation fStartTlsActive is set.
+     * The ssl_ctx and ssl pointers store opaque references to the
+     * OpenSSL context and session used for encryption.  These fields are
+     * valid only when fStartTlsActive is true and must be cleared
+     * (see WsckFreeTls in comwsock.c) before closing the socket.
+     */
+    int		fStartTlsRequested;
+    int		fStartTlsActive;
+    int         fImplicitTlsRequested;
+    int         fImplicitTlsActive;
+    void	*ssl_ctx;
+    void	*ssl;
 
     union {                                     // JYF: 29-Sep-2000, fix alignment fault
         HOSTENT stHostBuf;                      // used by WSAGetHostByName
@@ -278,11 +298,11 @@ typedef struct s_stdcom
     // Telnet emulation data
     int         NVTstate;       // Current state of Network Virtual Terminal
     STOPT       stMode[MODE_MAX];
-    int         fTn3270Mode;
-    int         fTn3270E;
-    int         fTn3270EReady;
-    int         cbTn3270Record;
-    BYTE        abTn3270Record[8192];
+    int         fIbm3270Mode;
+    int         fIbm3270E;
+    int         fIbm3270EReady;
+    int         cbIbm3270Record;
+    BYTE        abIbm3270Record[8192];
     int         nSbOption;
     int         nSbLen;
     int         fSbIac;
@@ -335,7 +355,7 @@ int    WINAPI SndBufrQuery(ST_STDCOM *pstPrivate, unsigned *pafStatus,
                       long *plHandshakeDelay);
 int    WINAPI SndBufrClear(ST_STDCOM *pstPrivate);
 DWORD  WINAPI ComstdThread(void *pvData);
-void          AutoDetectAnalyze(ST_STDCOM *pstPrivate, int nBytes, char *pchBufr);
+void          AutoDetectAnalyze(ST_STDCOM *pstPrivate, int nBytes, BYTE *pchBufr);
 void          AutoDetectOutput(ST_STDCOM *pstPrivate, void *pvBufr, int nSize);
 void          AutoDetectStart(ST_STDCOM *pstPrivate);
 void          AutoDetectStop(ST_STDCOM *pstPrivate);

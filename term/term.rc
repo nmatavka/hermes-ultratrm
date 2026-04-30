@@ -77,14 +77,14 @@ BEGIN
 	MENUITEM "&Capture File...",            IDM_ACTIONS_CAP
 	MENUITEM "Send &Text File...",          IDM_ACTIONS_SEND_TEXT
 	MENUITEM SEPARATOR
-	MENUITEM "TN3270 IND$FILE &Send...",   IDM_TN3270_INDFILE_SEND, GRAYED
-	MENUITEM "TN3270 IND$FILE &Receive...", IDM_TN3270_INDFILE_RECEIVE, GRAYED
-	MENUITEM "Start TN3270 3287 &Printer", IDM_TN3270_PRINTER_START, GRAYED
-	MENUITEM "Stop TN3270 3287 Printer",   IDM_TN3270_PRINTER_STOP, GRAYED
-	MENUITEM "TN3270 Settin&gs...",         IDM_TN3270_SETTINGS, GRAYED
-	MENUITEM "Start IBM 5250 &Printer",    IDM_TN5250_PRINTER_START, GRAYED
-	MENUITEM "Stop IBM 5250 Printer",      IDM_TN5250_PRINTER_STOP, GRAYED
-	MENUITEM "IBM 5250 Setting&s...",       IDM_TN5250_SETTINGS, GRAYED
+	MENUITEM "IBM 3270 IND$FILE &Send...",   IDM_IBM3270_INDFILE_SEND, GRAYED
+	MENUITEM "IBM 3270 IND$FILE &Receive...", IDM_IBM3270_INDFILE_RECEIVE, GRAYED
+	MENUITEM "Start IBM 3270 3287 &Printer", IDM_IBM3270_PRINTER_START, GRAYED
+	MENUITEM "Stop IBM 3270 3287 Printer",   IDM_IBM3270_PRINTER_STOP, GRAYED
+	MENUITEM "IBM 3270 Settin&gs...",         IDM_IBM3270_SETTINGS, GRAYED
+	MENUITEM "Start IBM 5250 &Printer",    IDM_IBM5250_PRINTER_START, GRAYED
+	MENUITEM "Stop IBM 5250 Printer",      IDM_IBM5250_PRINTER_STOP, GRAYED
+	MENUITEM "IBM 5250 Setting&s...",       IDM_IBM5250_SETTINGS, GRAYED
 	MENUITEM SEPARATOR
 	MENUITEM "Capture to &Printer",         IDM_ACTIONS_PRINT
 	END
@@ -183,6 +183,18 @@ BEGIN
 		MENUITEM "What's This?",                                IDM_CONTEXT_WHATS_THIS
 		*/
     END
+END
+
+IDD_REXX_PROMPT DIALOGEX 0, 0, 230, 74
+STYLE DS_SETFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "UltraTerminal"
+FONT 8, "MS Shell Dlg 2"
+BEGIN
+    LTEXT           "",IDC_REXX_PROMPT_TEXT,7,7,216,18
+    EDITTEXT        IDC_REXX_PROMPT_EDIT,7,28,216,14,ES_AUTOHSCROLL
+    COMBOBOX        IDC_REXX_PROMPT_LIST,7,28,216,80,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    DEFPUSHBUTTON   "OK",IDOK,118,52,50,14
+    PUSHBUTTON      "Cancel",IDCANCEL,173,52,50,14
 END
 
 
@@ -589,11 +601,11 @@ BEGIN
     40424                   "Stop..."
     40425                   "Pause..."
     40426                   "Resume..."
-    40409                   "Starts a TN3270 IND$FILE send transfer"
-    40410                   "Starts a TN3270 IND$FILE receive transfer"
-    40411                   "Starts the TN3270E 3287 printer helper"
-    40412                   "Stops the TN3270E 3287 printer helper"
-    40413                   "Shows TN3270 settings"
+    40409                   "Starts an IBM 3270 IND$FILE send transfer"
+    40410                   "Starts an IBM 3270 IND$FILE receive transfer"
+    40411                   "Starts the IBM 3270 3287 printer helper"
+    40412                   "Stops the IBM 3270 3287 printer helper"
+    40413                   "Shows IBM 3270 settings"
     40414                   "Starts the IBM 5250 printer helper"
     40415                   "Stops the IBM 5250 printer helper"
     40416                   "Shows IBM 5250 settings"
@@ -684,8 +696,8 @@ BEGIN
 	IDS_EMUNAME_VT320		"VT320"
 	IDS_EMUNAME_VT100PLUS	"VT100+"
 	IDS_EMUNAME_VTUTF8		"VT-UTF8"
-	IDS_EMUNAME_TN3270		"TN3270"
-	IDS_EMUNAME_TN5250		"IBM 5250"
+	IDS_EMUNAME_IBM3270		"IBM 3270"
+	IDS_EMUNAME_IBM5250		"IBM 5250"
 	IDS_EMUNAME_VIDEOTEX	"Videotex"
 END
 

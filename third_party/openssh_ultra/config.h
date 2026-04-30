@@ -69,9 +69,8 @@
 /* MinGW's nanosleep inline calls nanosleep64, which we provide in the
  * UltraTerminal Win32 shim to avoid a winpthread runtime dependency. */
 #define HAVE_NANOSLEEP 1
-/* MinGW advertises clock_gettime through inline/macro names that do not link
- * for us; let OpenSSH fall back to gettimeofday for monotime. */
-/* #undef HAVE_CLOCK_GETTIME */
+/* Modern llvm-mingw exposes clock_gettime through the CRT headers. */
+#define HAVE_CLOCK_GETTIME 1
 #define HAVE_LONG_LONG_INT 1
 #define HAVE_UNSIGNED_LONG_LONG_INT 1
 #define HAVE_UINTXX_T 1
@@ -94,6 +93,10 @@
 #define HAVE_DECL_MEMMEM 0
 #define HAVE_DECL_FTRUNCATE 0
 #define HAVE_DECL_BZERO 0
+
+#ifndef __cplusplus
+typedef unsigned int uint;
+#endif
 
 /* Autoconf-style feature tests must be undefined when unavailable. */
 /* #undef HAVE_STRLCPY */

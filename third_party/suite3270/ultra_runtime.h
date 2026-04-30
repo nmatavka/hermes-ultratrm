@@ -1,5 +1,5 @@
 /*
- * UltraTerminal TN3270 runtime API.
+ * UltraTerminal IBM 3270 runtime API.
  *
  * This is the UltraTerminal-facing glue boundary for the suite3270-derived
  * runtime. Protocol constants and screen-state behavior are adapted from
@@ -47,7 +47,7 @@
 #define UT3270_KEY_PA_BASE 200
 
 #define UT3270_STATUS_CONNECTED 0x0001
-#define UT3270_STATUS_TN3270E 0x0002
+#define UT3270_STATUS_ENHANCED_TELNET 0x0002
 #define UT3270_STATUS_KEYBOARD_LOCKED 0x0004
 #define UT3270_STATUS_PRINTER_RUNNING 0x0008
 #define UT3270_STATUS_TLS_REQUESTED 0x0010
@@ -103,7 +103,7 @@ void ut3270_settings_defaults(UT3270_SETTINGS *settings);
 int ut3270_runtime_create(UT3270_RUNTIME **out_runtime,
         const UT3270_SETTINGS *settings);
 void ut3270_runtime_destroy(UT3270_RUNTIME *runtime);
-void ut3270_runtime_set_telnet_mode(UT3270_RUNTIME *runtime, int tn3270e);
+void ut3270_runtime_set_telnet_mode(UT3270_RUNTIME *runtime, int enhanced_telnet);
 int ut3270_runtime_feed_record(UT3270_RUNTIME *runtime,
         const unsigned char *record, int record_len,
         unsigned char *out_record, int out_limit, int *out_len);

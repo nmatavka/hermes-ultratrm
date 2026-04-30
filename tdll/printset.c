@@ -166,8 +166,8 @@ void printsetSetup(const HPRINT hPrint, const HWND hwnd)
 		#if defined(_DEBUG)
 		if (dwError != 0)
 			{
-			wsprintf(ach, "PrintDlg error 0x%x", dwError);
-			MessageBox(hwnd, ach, "Debug", MB_ICONINFORMATION | MB_OK);
+			wsprintfW(ach, L"PrintDlg error 0x%x", dwError);
+			MessageBoxW(hwnd, ach, L"Debug", MB_ICONINFORMATION | MB_OK);
 			}
 		#endif
 
@@ -206,8 +206,8 @@ void printsetSetup(const HPRINT hPrint, const HWND hwnd)
 
 			if (dwError != 0)
 				{
-				wsprintf(ach, "PrintDlg error 0x%x", dwError);
-				MessageBox(hwnd, ach, "Debug", MB_ICONINFORMATION | MB_OK);
+				wsprintfW(ach, L"PrintDlg error 0x%x", dwError);
+				MessageBoxW(hwnd, ach, L"Debug", MB_ICONINFORMATION | MB_OK);
 				}
 			#endif
 
@@ -936,8 +936,8 @@ int printPageSetup(const HPRINT hPrint, const HWND hwnd)
 
 		if (dwError != 0)
 			{
-			wsprintf(ach, "PrintDlg error 0x%x", dwError);
-			MessageBox(hwnd, ach, "Debug", MB_ICONINFORMATION | MB_OK);
+			wsprintfW(ach, L"PrintDlg error 0x%x", dwError);
+			MessageBoxW(hwnd, ach, L"Debug", MB_ICONINFORMATION | MB_OK);
 			}
 		#endif
 

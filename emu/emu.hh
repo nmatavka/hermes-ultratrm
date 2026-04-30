@@ -318,8 +318,8 @@ struct stEmuBaseSFSettings
                                 // 117 = EMU_ANSIW
 								// 118 = EMU_VT100PLUS
 								// 119 = EMU_VTUTF8
-								// 120 = EMU_TN3270
-								// 121 = EMU_TN5250
+								// 120 = EMU_IBM3270
+								// 121 = EMU_IBM5250
 								// 122 = EMU_VIDEOTEX
 								//
 			nTermKeys,			// 0 = EMU_KEYS_ACCEL
@@ -367,7 +367,7 @@ struct stEmuBaseSFSettings
                                 // 2 = EMU_BKSPKEYS_DEL
                                 // 3 = EMU_BKSPKEYS_CTRLHSPACE
 
-    WCHAR   acTelnetId[EMU_MAX_TELNETID];   // Telnet terminal ID
+    WCHAR   acTelnetId[EMU_MAX_TELNETID];   // Terminal type/device ID
 	};
 
 // This macro returns the virtual image row of the supplied row number.  That is,
@@ -417,10 +417,10 @@ int 	stdResetTerminal(const HHEMU hhEmu, const int);
 void	std_emu_ntfy(const HHEMU hhEmu, const int nNtfy);
 int 	std_HomeHostCursor(const HHEMU hhEmu);
 
-// from tn3270.c
+// from ibm3270.c
 //
-void    tn3270_init(const HHEMU hhEmu);
-void    tn5250_init(const HHEMU hhEmu);
+void    ibm3270_init(const HHEMU hhEmu);
+void    ibm5250_init(const HHEMU hhEmu);
 void    videotex_init(const HHEMU hhEmu);
 
 // from emu_scr.c

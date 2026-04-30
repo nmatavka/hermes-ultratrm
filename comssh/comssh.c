@@ -72,10 +72,10 @@ struct stSshCom
     int nSbLen;
     int fSbIac;
     BYTE abSbBuf[512];
-    int fTn3270Started;
-    int fTn3270E;
-    int cbTn3270Record;
-    BYTE abTn3270Record[8192];
+    int fIbm3270Started;
+    int fIbm3270E;
+    int cbIbm3270Record;
+    BYTE abIbm3270Record[8192];
     };
 
 static int WINAPI SshPortActivate(void *pvPrivate, WCHAR *pszPortName,
@@ -97,6 +97,7 @@ static ST_SSHCOM *SshFindOrCreate(HCOM hCom);
 static ST_SSHCOM *SshFromPrivate(void *pvPrivate);
 static void SshStopProcess(ST_SSHCOM *pstSsh);
 static void SshSetStatus(ST_SSHCOM *pstSsh, const WCHAR *pszStatus);
+static void SshSetConnectedStatus(ST_SSHCOM *pstSsh);
 static void SshSetError(ST_SSHCOM *pstSsh, const WCHAR *pszError);
 static int SshQueueBytes(ST_SSHCOM *pstSsh, const BYTE *pbData, int cbData);
 static int SshPopBytes(ST_SSHCOM *pstSsh, BYTE *pbData, int cbData);
@@ -104,18 +105,20 @@ static int SshSendInternal(ST_SSHCOM *pstSsh, const BYTE *pbData, int cbData);
 static int SshGetEmulatorId(ST_SSHCOM *pstSsh);
 static HEMU SshGetEmu(ST_SSHCOM *pstSsh);
 static int SshProcessTelnetBytes(ST_SSHCOM *pstSsh, const BYTE *pbIn,
-        int cbIn, BYTE *pbOut, int cbOut, int fTn3270);
-static void SshMaybeStartTN3270(ST_SSHCOM *pstSsh);
+        int cbIn, BYTE *pbOut, int cbOut, int fIbm3270);
+static void SshMaybeStartIbm3270(ST_SSHCOM *pstSsh);
 static void SshSendTelnetCommand(ST_SSHCOM *pstSsh, int nCommand, int nOption);
 static void SshSendTerminalType(ST_SSHCOM *pstSsh);
 static void SshSendNAWS(ST_SSHCOM *pstSsh);
 static void SshAppendSubnegByte(ST_SSHCOM *pstSsh, BYTE b);
-static void SshProcessTN3270ESubneg(ST_SSHCOM *pstSsh);
-static void SshSendTN3270DeviceType(ST_SSHCOM *pstSsh);
-static void SshSendTN3270Functions(ST_SSHCOM *pstSsh);
-static void SshDeliverTN3270Record(ST_SSHCOM *pstSsh);
-static int SshOptionSupportedLocal(int nOption, int fTn3270);
-static int SshOptionSupportedRemote(int nOption, int fTn3270);
+static void SshProcessIbm3270Subneg(ST_SSHCOM *pstSsh);
+static void SshSendIbm3270DeviceType(ST_SSHCOM *pstSsh);
+static void SshSendIbm3270Functions(ST_SSHCOM *pstSsh);
+static void SshDeliverIbm3270Record(ST_SSHCOM *pstSsh);
+static void SshWideToProtocolAscii(char *pszDest, int cchDest,
+        const WCHAR *pszSrc);
+static int SshOptionSupportedLocal(int nOption, int fIbm3270);
+static int SshOptionSupportedRemote(int nOption, int fIbm3270);
 static void SshCopy(WCHAR *pszDest, int cchDest, const WCHAR *pszSrc);
 static const WCHAR *SshSkipSpaces(const WCHAR *psz);
 static int SshStartsWith(const WCHAR *psz, const WCHAR *pszPrefix);
@@ -233,6 +236,28 @@ static void SshSetStatus(ST_SSHCOM *pstSsh, const WCHAR *pszStatus)
             sizeof(pstSsh->achStatus) / sizeof(WCHAR), pszStatus);
     }
 
+static void SshSetConnectedStatus(ST_SSHCOM *pstSsh)
+    {
+    const WCHAR *pszProtocol;
+    WCHAR achStatus[SSH_STATUS_CHARS];
+
+    if (pstSsh == 0)
+        return;
+
+    pszProtocol = emuQueryIbmProtocolName(SshGetEmulatorId(pstSsh),
+            pstSsh->nMode);
+    if (pszProtocol == NULL)
+        {
+        SshSetStatus(pstSsh, L"SSH connected");
+        return;
+        }
+
+    SshCopy(achStatus, SSH_STATUS_CHARS, pszProtocol);
+    SshCopy(achStatus + lstrlenW(achStatus),
+            SSH_STATUS_CHARS - lstrlenW(achStatus), L" connected");
+    SshSetStatus(pstSsh, achStatus);
+    }
+
 static void SshSetError(ST_SSHCOM *pstSsh, const WCHAR *pszError)
     {
     if (pstSsh == 0)
@@ -260,9 +285,9 @@ static int WINAPI SshPortActivate(void *pvPrivate, WCHAR *pszPortName,
     pstSsh->cbRxHead = 0;
     pstSsh->cbRxTail = 0;
     pstSsh->cbRxUsed = 0;
-    pstSsh->cbTn3270Record = 0;
-    pstSsh->fTn3270Started = FALSE;
-    pstSsh->fTn3270E = FALSE;
+    pstSsh->cbIbm3270Record = 0;
+    pstSsh->fIbm3270Started = FALSE;
+    pstSsh->fIbm3270E = FALSE;
     pstSsh->nvtState = NVT_THRU;
     pstSsh->nSbLen = 0;
     pstSsh->fSbIac = FALSE;
@@ -335,11 +360,11 @@ static int WINAPI SshPortActivate(void *pvPrivate, WCHAR *pszPortName,
 
     pstSsh->fActivated = TRUE;
     pstSsh->fConnected = utssh_is_connected(pstSsh->pstSession);
-    SshSetStatus(pstSsh, L"SSH connected");
+    SshSetConnectedStatus(pstSsh);
 
     if (pstSsh->nMode == CNCT_TRANSPORT_SSH_TUNNEL &&
-            SshGetEmulatorId(pstSsh) == EMU_TN3270)
-        SshMaybeStartTN3270(pstSsh);
+            SshGetEmulatorId(pstSsh) == EMU_IBM3270)
+        SshMaybeStartIbm3270(pstSsh);
 
     ComNotify(pstSsh->hCom, CONNECT);
     return COM_OK;
@@ -410,17 +435,17 @@ static int WINAPI SshRcvRefill(void *pvPrivate)
         }
 #endif
 
-#if defined(INCL_TN5250)
-    if (nEmu == EMU_TN5250)
+#if defined(INCL_IBM5250)
+    if (nEmu == EMU_IBM5250)
         {
-        emuTn5250BytesIn(SshGetEmu(pstSsh), pstSsh->abRead, cbRead);
+        emuIbm5250BytesIn(SshGetEmu(pstSsh), pstSsh->abRead, cbRead);
         return FALSE;
         }
 #endif
 
-    if (pstSsh->nMode == CNCT_TRANSPORT_SSH_TUNNEL && nEmu == EMU_TN3270)
+    if (pstSsh->nMode == CNCT_TRANSPORT_SSH_TUNNEL && nEmu == EMU_IBM3270)
         {
-        SshMaybeStartTN3270(pstSsh);
+        SshMaybeStartIbm3270(pstSsh);
         SshProcessTelnetBytes(pstSsh, pstSsh->abRead, cbRead,
                 abFiltered, sizeof(abFiltered), TRUE);
         return FALSE;
@@ -484,7 +509,7 @@ static int WINAPI SshSndBufrSend(void *pvPrivate, void *pvBufr, int nCount)
     nEmu = SshGetEmulatorId(pstSsh);
 
     if (pstSsh->nMode == CNCT_TRANSPORT_SSH_TUNNEL &&
-            nEmu != EMU_TN3270 && nEmu != EMU_TN5250 && nEmu != EMU_VIDEOTEX)
+            nEmu != EMU_IBM3270 && nEmu != EMU_IBM5250 && nEmu != EMU_VIDEOTEX)
         fEscape = TRUE;
 
     if (fEscape)
@@ -799,14 +824,14 @@ static int SshGetEmulatorId(ST_SSHCOM *pstSsh)
     return hEmu ? emuQueryEmulatorId(hEmu) : 0;
     }
 
-static void SshMaybeStartTN3270(ST_SSHCOM *pstSsh)
+static void SshMaybeStartIbm3270(ST_SSHCOM *pstSsh)
     {
-    if (pstSsh == 0 || pstSsh->fTn3270Started)
+    if (pstSsh == 0 || pstSsh->fIbm3270Started)
         return;
 
-    pstSsh->fTn3270Started = TRUE;
+    pstSsh->fIbm3270Started = TRUE;
     pstSsh->nvtState = NVT_THRU;
-    pstSsh->cbTn3270Record = 0;
+    pstSsh->cbIbm3270Record = 0;
     SshSendTelnetCommand(pstSsh, DO, TELOPT_TN3270E);
     SshSendTelnetCommand(pstSsh, WILL, TELOPT_TN3270E);
     SshSendTelnetCommand(pstSsh, WILL, TELOPT_TTYPE);
@@ -827,7 +852,7 @@ static void SshSendTelnetCommand(ST_SSHCOM *pstSsh, int nCommand, int nOption)
     }
 
 static int SshProcessTelnetBytes(ST_SSHCOM *pstSsh, const BYTE *pbIn,
-        int cbIn, BYTE *pbOut, int cbOut, int fTn3270)
+        int cbIn, BYTE *pbOut, int cbOut, int fIbm3270)
     {
     int i;
     int cbOutUsed;
@@ -847,11 +872,11 @@ static int SshProcessTelnetBytes(ST_SSHCOM *pstSsh, const BYTE *pbIn,
                 pstSsh->nvtState = NVT_IAC;
                 break;
                 }
-            if (fTn3270)
+            if (fIbm3270)
                 {
-                if (pstSsh->cbTn3270Record <
-                        (int)sizeof(pstSsh->abTn3270Record))
-                    pstSsh->abTn3270Record[pstSsh->cbTn3270Record++] = b;
+                if (pstSsh->cbIbm3270Record <
+                        (int)sizeof(pstSsh->abIbm3270Record))
+                    pstSsh->abIbm3270Record[pstSsh->cbIbm3270Record++] = b;
                 }
             else if (cbOutUsed < cbOut)
                 pbOut[cbOutUsed++] = b;
@@ -861,11 +886,11 @@ static int SshProcessTelnetBytes(ST_SSHCOM *pstSsh, const BYTE *pbIn,
             switch (b)
                 {
             case IAC:
-                if (fTn3270)
+                if (fIbm3270)
                     {
-                    if (pstSsh->cbTn3270Record <
-                            (int)sizeof(pstSsh->abTn3270Record))
-                        pstSsh->abTn3270Record[pstSsh->cbTn3270Record++] = b;
+                    if (pstSsh->cbIbm3270Record <
+                            (int)sizeof(pstSsh->abIbm3270Record))
+                        pstSsh->abIbm3270Record[pstSsh->cbIbm3270Record++] = b;
                     }
                 else if (cbOutUsed < cbOut)
                     pbOut[cbOutUsed++] = b;
@@ -895,8 +920,8 @@ static int SshProcessTelnetBytes(ST_SSHCOM *pstSsh, const BYTE *pbIn,
                 break;
 
             case EOR:
-                if (fTn3270)
-                    SshDeliverTN3270Record(pstSsh);
+                if (fIbm3270)
+                    SshDeliverIbm3270Record(pstSsh);
                 pstSsh->nvtState = NVT_THRU;
                 break;
 
@@ -907,7 +932,7 @@ static int SshProcessTelnetBytes(ST_SSHCOM *pstSsh, const BYTE *pbIn,
             break;
 
         case NVT_DO:
-            if (SshOptionSupportedLocal(b, fTn3270))
+            if (SshOptionSupportedLocal(b, fIbm3270))
                 {
                 SshSendTelnetCommand(pstSsh, WILL, b);
                 if (b == TELOPT_NAWS)
@@ -924,7 +949,7 @@ static int SshProcessTelnetBytes(ST_SSHCOM *pstSsh, const BYTE *pbIn,
             break;
 
         case NVT_WILL:
-            if (SshOptionSupportedRemote(b, fTn3270))
+            if (SshOptionSupportedRemote(b, fIbm3270))
                 SshSendTelnetCommand(pstSsh, DO, b);
             else
                 SshSendTelnetCommand(pstSsh, DONT, b);
@@ -935,8 +960,8 @@ static int SshProcessTelnetBytes(ST_SSHCOM *pstSsh, const BYTE *pbIn,
             SshSendTelnetCommand(pstSsh, DONT, b);
             if (b == TELOPT_TN3270E)
                 {
-                pstSsh->fTn3270E = FALSE;
-                emuTn3270SetTelnetMode(SshGetEmu(pstSsh), FALSE);
+                pstSsh->fIbm3270E = FALSE;
+                emuIbm3270SetTelnetMode(SshGetEmu(pstSsh), FALSE);
                 }
             pstSsh->nvtState = NVT_THRU;
             break;
@@ -966,7 +991,7 @@ static int SshProcessTelnetBytes(ST_SSHCOM *pstSsh, const BYTE *pbIn,
                             pstSsh->abSbBuf[0] == TELQUAL_SEND)
                         SshSendTerminalType(pstSsh);
                     else if (pstSsh->nSbOption == TELOPT_TN3270E)
-                        SshProcessTN3270ESubneg(pstSsh);
+                        SshProcessIbm3270Subneg(pstSsh);
                     pstSsh->nvtState = NVT_THRU;
                     }
                 else if (b == (BYTE)IAC)
@@ -989,25 +1014,25 @@ static int SshProcessTelnetBytes(ST_SSHCOM *pstSsh, const BYTE *pbIn,
     return cbOutUsed;
     }
 
-static int SshOptionSupportedLocal(int nOption, int fTn3270)
+static int SshOptionSupportedLocal(int nOption, int fIbm3270)
     {
     if (nOption == TELOPT_TTYPE || nOption == TELOPT_NAWS ||
             nOption == TELOPT_BINARY || nOption == TELOPT_SGA)
         return TRUE;
 
-    if (fTn3270 && (nOption == TELOPT_EOR || nOption == TELOPT_TN3270E))
+    if (fIbm3270 && (nOption == TELOPT_EOR || nOption == TELOPT_TN3270E))
         return TRUE;
 
     return FALSE;
     }
 
-static int SshOptionSupportedRemote(int nOption, int fTn3270)
+static int SshOptionSupportedRemote(int nOption, int fIbm3270)
     {
     if (nOption == TELOPT_ECHO || nOption == TELOPT_SGA ||
             nOption == TELOPT_BINARY)
         return TRUE;
 
-    if (fTn3270 && (nOption == TELOPT_EOR || nOption == TELOPT_TN3270E))
+    if (fIbm3270 && (nOption == TELOPT_EOR || nOption == TELOPT_TN3270E))
         return TRUE;
 
     return FALSE;
@@ -1024,22 +1049,24 @@ static void SshSendTerminalType(ST_SSHCOM *pstSsh)
     BYTE abOut[320];
     STEMUSET stEmuSet;
     HEMU hEmu;
-    char *pszTerm;
+    char achTermType[EMU_MAX_TELNETID];
+    const char *pszTerm;
     int nEmu;
     int i;
     int pos;
 
     memset(&stEmuSet, 0, sizeof(stEmuSet));
-    strcpy((char *)stEmuSet.acTelnetId, "DEC-VT100");
     hEmu = SshGetEmu(pstSsh);
     if (hEmu)
         emuQuerySettings(hEmu, &stEmuSet);
 
     nEmu = hEmu ? emuQueryEmulatorId(hEmu) : EMU_VT100;
-    pszTerm = (char *)stEmuSet.acTelnetId;
-    if (nEmu == EMU_TN3270 && pszTerm[0] == '\0')
+    SshWideToProtocolAscii(achTermType, sizeof(achTermType),
+            stEmuSet.acTelnetId);
+    pszTerm = achTermType;
+    if (nEmu == EMU_IBM3270 && achTermType[0] == '\0')
         pszTerm = "IBM-3278-2-E";
-    else if (pszTerm[0] == '\0')
+    else if (achTermType[0] == '\0')
         {
         switch (nEmu)
             {
@@ -1061,7 +1088,7 @@ static void SshSendTerminalType(ST_SSHCOM *pstSsh)
         case EMU_VTUTF8:
             pszTerm = "VT-UTF8";
             break;
-        case EMU_TN3270:
+        case EMU_IBM3270:
             pszTerm = "IBM-3278-2-E";
             break;
         default:
@@ -1109,7 +1136,7 @@ static void SshSendNAWS(ST_SSHCOM *pstSsh)
     SshSendInternal(pstSsh, abOut, sizeof(abOut));
     }
 
-static void SshProcessTN3270ESubneg(ST_SSHCOM *pstSsh)
+static void SshProcessIbm3270Subneg(ST_SSHCOM *pstSsh)
     {
     BYTE *buf;
     int len;
@@ -1123,54 +1150,62 @@ static void SshProcessTN3270ESubneg(ST_SSHCOM *pstSsh)
     if (len >= 2 && buf[0] == UT_TN3270E_OP_SEND &&
             buf[1] == UT_TN3270E_OP_DEVICE_TYPE)
         {
-        SshSendTN3270DeviceType(pstSsh);
+        SshSendIbm3270DeviceType(pstSsh);
         return;
         }
 
     if (len >= 2 && buf[0] == UT_TN3270E_OP_DEVICE_TYPE &&
             buf[1] == UT_TN3270E_OP_IS)
         {
-        pstSsh->fTn3270E = TRUE;
-        emuTn3270SetTelnetMode(SshGetEmu(pstSsh), TRUE);
+        pstSsh->fIbm3270E = TRUE;
+        emuIbm3270SetTelnetMode(SshGetEmu(pstSsh), TRUE);
         return;
         }
 
     if (len >= 2 && buf[0] == UT_TN3270E_OP_FUNCTIONS &&
             buf[1] == UT_TN3270E_OP_REQUEST)
         {
-        SshSendTN3270Functions(pstSsh);
+        SshSendIbm3270Functions(pstSsh);
         return;
         }
 
     if (buf[0] == UT_TN3270E_OP_REJECT)
         {
-        pstSsh->fTn3270E = FALSE;
-        emuTn3270SetTelnetMode(SshGetEmu(pstSsh), FALSE);
+        pstSsh->fIbm3270E = FALSE;
+        emuIbm3270SetTelnetMode(SshGetEmu(pstSsh), FALSE);
         }
     }
 
-static void SshSendTN3270DeviceType(ST_SSHCOM *pstSsh)
+static void SshSendIbm3270DeviceType(ST_SSHCOM *pstSsh)
     {
     BYTE abOut[256];
     STEMUSET stEmuSet;
     HEMU hEmu;
-    char *pszTerm;
-    char *pszLu;
+    char achTerm[EMU_IBM3270_MAX_LUNAME];
+    char achTelnetId[EMU_MAX_TELNETID];
+    char achLu[EMU_IBM3270_MAX_LUNAME];
+    const char *pszTerm;
+    const char *pszLu;
     int pos;
     int i;
 
     memset(&stEmuSet, 0, sizeof(stEmuSet));
-    strcpy((char *)stEmuSet.acTelnetId, "IBM-3278-2-E");
     hEmu = SshGetEmu(pstSsh);
     if (hEmu)
         emuQuerySettings(hEmu, &stEmuSet);
 
-    pszTerm = (char *)stEmuSet.acTn3270DeviceName;
+    SshWideToProtocolAscii(achTerm, sizeof(achTerm),
+            stEmuSet.acIbm3270DeviceName);
+    pszTerm = achTerm;
     if (pszTerm[0] == '\0')
-        pszTerm = (char *)stEmuSet.acTelnetId;
-    if (pszTerm[0] == '\0')
-        pszTerm = "IBM-3278-2-E";
-    pszLu = (char *)stEmuSet.acTn3270LuName;
+        {
+        SshWideToProtocolAscii(achTelnetId, sizeof(achTelnetId),
+                stEmuSet.acTelnetId);
+        pszTerm = achTelnetId[0] ? achTelnetId : "IBM-3278-2-E";
+        }
+    SshWideToProtocolAscii(achLu, sizeof(achLu),
+            stEmuSet.acIbm3270LuName);
+    pszLu = achLu;
 
     pos = 0;
     abOut[pos++] = (BYTE)IAC;
@@ -1192,7 +1227,7 @@ static void SshSendTN3270DeviceType(ST_SSHCOM *pstSsh)
     SshSendInternal(pstSsh, abOut, pos);
     }
 
-static void SshSendTN3270Functions(ST_SSHCOM *pstSsh)
+static void SshSendIbm3270Functions(ST_SSHCOM *pstSsh)
     {
     BYTE abOut[18];
     int pos;
@@ -1215,18 +1250,43 @@ static void SshSendTN3270Functions(ST_SSHCOM *pstSsh)
     SshSendInternal(pstSsh, abOut, pos);
     }
 
-static void SshDeliverTN3270Record(ST_SSHCOM *pstSsh)
+static void SshDeliverIbm3270Record(ST_SSHCOM *pstSsh)
     {
     HEMU hEmu;
 
-    if (pstSsh->cbTn3270Record <= 0)
+    if (pstSsh->cbIbm3270Record <= 0)
         return;
 
     hEmu = SshGetEmu(pstSsh);
     if (hEmu)
-        emuTn3270RecordIn(hEmu, pstSsh->abTn3270Record,
-                pstSsh->cbTn3270Record);
-    pstSsh->cbTn3270Record = 0;
+        emuIbm3270RecordIn(hEmu, pstSsh->abIbm3270Record,
+                pstSsh->cbIbm3270Record);
+    pstSsh->cbIbm3270Record = 0;
+    }
+
+static void SshWideToProtocolAscii(char *pszDest, int cchDest,
+        const WCHAR *pszSrc)
+    {
+    int i;
+    int j;
+    WCHAR ch;
+
+    if (pszDest == 0 || cchDest <= 0)
+        return;
+
+    pszDest[0] = '\0';
+    if (pszSrc == 0)
+        return;
+
+    for (i = 0, j = 0; pszSrc[i] != L'\0' && j < cchDest - 1; ++i)
+        {
+        ch = pszSrc[i];
+        if (ch >= L' ' && ch <= L'~')
+            pszDest[j++] = (char)ch;
+        else if (ch > L'~')
+            pszDest[j++] = '?';
+        }
+    pszDest[j] = '\0';
     }
 
 static void SshCopy(WCHAR *pszDest, int cchDest, const WCHAR *pszSrc)

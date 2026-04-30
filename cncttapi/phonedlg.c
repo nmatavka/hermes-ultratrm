@@ -16,6 +16,7 @@
 #include <prsht.h>
 #include <shlobj.h>
 #include <time.h>
+#include <stdlib.h>
 
 #include <tdll/stdtyp.h>
 #include <tdll/session.h>
@@ -32,9 +33,12 @@
 #include <tdll/ut_text.h>
 #include <term/res.h>
 #include <tdll/open_msc.h>
-#if defined(INCL_MINITEL)
+/*
+ * Pull in emulator definitions so that the property dialog can query and
+ * update emulator settings (for example TLS modes).  These functions are
+ * available regardless of which emulators are compiled in.
+ */
 #include "emu/emu.h"
-#endif // INCL_MINITEL
 
 #include "cncttapi.hh"
 #include "cncttapi.h"
@@ -43,6 +47,10 @@ STATIC_FUNC int tapi_SAVE_NEWPHONENUM(HWND hwnd);
 STATIC_FUNC LRESULT tapi_WM_NOTIFY(const HWND hwnd, const int nId);
 STATIC_FUNC void EnableCCAC(const HWND hwnd);
 STATIC_FUNC void ModemCheck(const HWND hwnd);
+STATIC_FUNC void PhoneDlgPopulateEmulatorCombo(HWND hwnd, HSESSION hSession);
+STATIC_FUNC void PhoneDlgSaveEmulator(HWND hwnd, HSESSION hSession);
+STATIC_FUNC void PhoneDlgApplyDirectTlsMode(HHDRIVER hhDriver,
+		HSESSION hSession, int nTlsMode);
 static int ValidatePhoneDlg(const HWND hwnd);
 static int CheckWindow(const HWND hwnd, const int id);
 static int VerifyAddress(const HWND hwnd);
@@ -115,6 +123,10 @@ INT_PTR CALLBACK NewPhoneDlg(HWND hwnd, UINT uMsg, WPARAM wPar, LPARAM lPar)
     #define IDC_TF_PORTNUM      206
     #define IDC_EB_PORTNUM      207
     #define IDC_TF_ACPROMPT     118
+    #define IDC_TF_TRANSPORT    215
+    #define IDC_CB_TRANSPORT    216
+    #define IDC_TF_EMULATOR     217
+    #define IDC_CB_EMULATOR     218
 
 	HWND	    hwndParent;
 	HHDRIVER    hhDriver;
@@ -205,24 +217,58 @@ INT_PTR CALLBACK NewPhoneDlg(HWND hwnd, UINT uMsg, WPARAM wPar, LPARAM lPar)
 			}
 
 		SendDlgItemMessage(hwnd, IDC_EB_PHONENUM, EM_SETLIMITTEXT,
-			sizeof(hhDriver->achDest)-1, 0);
+			sizeof(hhDriver->achDest) / sizeof(WCHAR) - 1, 0);
 
 		SendDlgItemMessage(hwnd, IDC_EB_AREACODE, EM_SETLIMITTEXT,
-			sizeof(hhDriver->achAreaCode)-1, 0);
+			sizeof(hhDriver->achAreaCode) / sizeof(WCHAR) - 1, 0);
 
 		if (hhDriver->achDest[0])
 			SetDlgItemText(hwnd, IDC_EB_PHONENUM, hhDriver->achDest);
 
 #if defined(INCL_WINSOCK)
 		SendDlgItemMessage(hwnd, IDC_EB_HOSTADDR, EM_SETLIMITTEXT,
-			sizeof(hhDriver->achDestAddr)-1, 0);
+			sizeof(hhDriver->achDestAddr) / sizeof(WCHAR) - 1, 0);
 
 		if (hhDriver->achDestAddr[0])
 			SetDlgItemText(hwnd, IDC_EB_HOSTADDR, hhDriver->achDestAddr);
 
-		wsprintf(ach, "%d", hhDriver->iPort);
+		wsprintfW(ach, L"%d", hhDriver->iPort);
 		SetDlgItemText(hwnd, IDC_EB_PORTNUM, ach);
 #endif
+
+#if defined(INCL_SSH)
+        SendDlgItemMessage(hwnd, IDC_CB_TRANSPORT, CB_ADDSTRING, 0,
+            (LPARAM)L"SSH Tunnel");
+        SendDlgItemMessage(hwnd, IDC_CB_TRANSPORT, CB_ADDSTRING, 0,
+            (LPARAM)L"Direct TCP/Telnet");
+        SendDlgItemMessage(hwnd, IDC_CB_TRANSPORT, CB_ADDSTRING, 0,
+            (LPARAM)L"StartTLS");
+        SendDlgItemMessage(hwnd, IDC_CB_TRANSPORT, CB_ADDSTRING, 0,
+            (LPARAM)L"Implicit TLS (SSL/TLS port)");
+        SendDlgItemMessage(hwnd, IDC_CB_TRANSPORT, CB_ADDSTRING, 0,
+            (LPARAM)L"SSH Interactive Shell");
+
+        switch (hhDriver->nTransport)
+            {
+        case CNCT_TRANSPORT_DIRECT_TCP:
+            if (hhDriver->nTcpTlsMode == CNCT_TCP_TLS_STARTTLS)
+                SendDlgItemMessage(hwnd, IDC_CB_TRANSPORT, CB_SETCURSEL, 2, 0);
+            else if (hhDriver->nTcpTlsMode == CNCT_TCP_TLS_IMPLICIT)
+                SendDlgItemMessage(hwnd, IDC_CB_TRANSPORT, CB_SETCURSEL, 3, 0);
+            else
+                SendDlgItemMessage(hwnd, IDC_CB_TRANSPORT, CB_SETCURSEL, 1, 0);
+            break;
+        case CNCT_TRANSPORT_SSH_INTERACTIVE:
+            SendDlgItemMessage(hwnd, IDC_CB_TRANSPORT, CB_SETCURSEL, 4, 0);
+            break;
+        case CNCT_TRANSPORT_SSH_TUNNEL:
+        default:
+            SendDlgItemMessage(hwnd, IDC_CB_TRANSPORT, CB_SETCURSEL, 0, 0);
+            break;
+            }
+#endif
+
+		PhoneDlgPopulateEmulatorCombo(hwnd, pS->hSession);
 
 		WCHAR_Fill(pS->acSessNameCopy, L'\0',
 			sizeof(pS->acSessNameCopy) / sizeof(WCHAR));
@@ -281,7 +327,7 @@ INT_PTR CALLBACK NewPhoneDlg(HWND hwnd, UINT uMsg, WPARAM wPar, LPARAM lPar)
 				}
 
 			else if (GetDlgItemText(hwnd, IDC_EB_AREACODE, ach,
-					sizeof(ach)) == 0)
+					sizeof(ach) / sizeof(WCHAR)) == 0)
 				{
 				SetFocus(GetDlgItem(hwnd, IDC_EB_AREACODE));
 				}
@@ -402,7 +448,7 @@ INT_PTR CALLBACK NewPhoneDlg(HWND hwnd, UINT uMsg, WPARAM wPar, LPARAM lPar)
 						if (IN_RANGE(pstLineIds->dwPermanentLineId,
 								DIRECT_COM1, DIRECT_COM4))
 							{
-							wsprintf(ach, "COM%d",
+							wsprintfW(ach, L"COM%d",
 								pstLineIds->dwPermanentLineId - DIRECT_COM1 + 1);
 
 							ComSetPortName(sessQueryComHdl(pS->hSession), ach);
@@ -521,6 +567,19 @@ INT_PTR CALLBACK NewPhoneDlg(HWND hwnd, UINT uMsg, WPARAM wPar, LPARAM lPar)
 			EnableCCAC(hwnd);
 			break;
 
+		case IDC_CB_TRANSPORT:
+			if (HIWORD(wPar) == CBN_SELCHANGE &&
+					SendDlgItemMessage(hwnd, IDC_CB_TRANSPORT,
+						CB_GETCURSEL, 0, 0) == 3)
+				{
+				BOOL fTranslated = FALSE;
+				const UINT uPort = GetDlgItemInt(hwnd, IDC_EB_PORTNUM,
+						&fTranslated, FALSE);
+				if (!fTranslated || uPort == 0 || uPort == 23)
+					SetDlgItemText(hwnd, IDC_EB_PORTNUM, L"992");
+				}
+			break;
+
 		case IDOK:
 			if (ValidatePhoneDlg(hwnd) == 0)
 				{
@@ -617,6 +676,153 @@ STATIC_FUNC LRESULT tapi_WM_NOTIFY(const HWND hDlg, const int nId)
 	return FALSE;
 	}
 
+STATIC_FUNC void PhoneDlgPopulateEmulatorCombo(HWND hwnd, HSESSION hSession)
+	{
+	typedef struct stPhoneEmuChoice
+		{
+		int nResourceId;
+		int nEmuId;
+		} STPHONEEMUCHOICE;
+
+	static const STPHONEEMUCHOICE astChoices[] =
+		{
+		{ IDS_EMUNAME_AUTO, EMU_AUTO },
+		{ IDS_EMUNAME_ANSI, EMU_ANSI },
+		{ IDS_EMUNAME_TTY, EMU_TTY },
+		{ IDS_EMUNAME_VT100, EMU_VT100 },
+		{ IDS_EMUNAME_VTUTF8, EMU_VTUTF8 },
+		{ IDS_EMUNAME_IBM3270, EMU_IBM3270 },
+		{ IDS_EMUNAME_IBM5250, EMU_IBM5250 },
+		{ IDS_EMUNAME_VIDEOTEX, EMU_VIDEOTEX },
+		{ IDS_EMUNAME_VIEW, EMU_VIEW },
+		{ IDS_EMUNAME_MINI, EMU_MINI },
+		{ IDS_EMUNAME_VT220, EMU_VT220 },
+		{ IDS_EMUNAME_VT320, EMU_VT320 },
+		{ IDS_EMUNAME_VT52, EMU_VT52 }
+		};
+	HWND hwndCombo;
+	HEMU hEmu;
+	int nCurrentEmu;
+	int i;
+	int nIndex;
+	WCHAR achName[EMU_MAX_NAMELEN];
+
+	hwndCombo = GetDlgItem(hwnd, IDC_CB_EMULATOR);
+	if (hwndCombo == 0)
+		return;
+
+	SendMessage(hwndCombo, CB_RESETCONTENT, 0, 0);
+	hEmu = sessQueryEmuHdl(hSession);
+	nCurrentEmu = hEmu ? emuQueryEmulatorId(hEmu) : EMU_AUTO;
+
+	for (i = 0; i < DIM(astChoices); ++i)
+		{
+		if (LoadString(glblQueryDllHinst(),
+				(unsigned int)astChoices[i].nResourceId,
+				achName, sizeof(achName) / sizeof(WCHAR)) <= 0)
+			continue;
+
+		nIndex = (int)SendMessage(hwndCombo, CB_ADDSTRING, 0,
+				(LPARAM)achName);
+		if (nIndex == CB_ERR)
+			continue;
+		SendMessage(hwndCombo, CB_SETITEMDATA, (WPARAM)nIndex,
+				(LPARAM)astChoices[i].nEmuId);
+		if (astChoices[i].nEmuId == nCurrentEmu)
+			SendMessage(hwndCombo, CB_SETCURSEL, (WPARAM)nIndex, 0);
+		}
+
+	if (SendMessage(hwndCombo, CB_GETCURSEL, 0, 0) == CB_ERR)
+		SendMessage(hwndCombo, CB_SETCURSEL, 0, 0);
+	}
+
+STATIC_FUNC void PhoneDlgSaveEmulator(HWND hwnd, HSESSION hSession)
+	{
+	HWND hwndCombo;
+	HEMU hEmu;
+	STEMUSET stSettings;
+	LRESULT lrSel;
+	LRESULT lrEmu;
+	int nOldEmu;
+	int nNewEmu;
+
+	hwndCombo = GetDlgItem(hwnd, IDC_CB_EMULATOR);
+	if (hwndCombo == 0 || !IsWindowEnabled(hwndCombo))
+		return;
+
+	hEmu = sessQueryEmuHdl(hSession);
+	if (hEmu == 0)
+		return;
+
+	lrSel = SendMessage(hwndCombo, CB_GETCURSEL, 0, 0);
+	if (lrSel == CB_ERR)
+		return;
+
+	lrEmu = SendMessage(hwndCombo, CB_GETITEMDATA, (WPARAM)lrSel, 0);
+	if (lrEmu == CB_ERR)
+		return;
+
+	nOldEmu = emuQueryEmulatorId(hEmu);
+	nNewEmu = (int)lrEmu;
+	if (emuQuerySettings(hEmu, &stSettings) != 0)
+		return;
+
+	stSettings.nEmuId = nNewEmu;
+	if (nOldEmu != nNewEmu)
+		emuQueryDefaultTelnetId(nNewEmu, stSettings.acTelnetId,
+				EMU_MAX_TELNETID);
+
+	if (nNewEmu == EMU_IBM5250 &&
+			stSettings.acIbm5250TermType[0] == L'\0')
+		StrCharCopy(stSettings.acIbm5250TermType, L"IBM-3179-2");
+
+	emuSetSettings(hEmu, &stSettings);
+	if (nOldEmu != nNewEmu)
+		emuLoad(hEmu, nNewEmu);
+	}
+
+STATIC_FUNC void PhoneDlgApplyDirectTlsMode(HHDRIVER hhDriver,
+		HSESSION hSession, int nTlsMode)
+	{
+	HEMU hEmu;
+	STEMUSET stSettings;
+	int nEmuId;
+
+	if (hhDriver == 0)
+		return;
+
+	if (nTlsMode < CNCT_TCP_TLS_OFF || nTlsMode > CNCT_TCP_TLS_IMPLICIT)
+		nTlsMode = CNCT_TCP_TLS_OFF;
+
+	hhDriver->nTransport = CNCT_TRANSPORT_DIRECT_TCP;
+	hhDriver->nTcpTlsMode = nTlsMode;
+
+	hEmu = sessQueryEmuHdl(hSession);
+	if (hEmu == 0 || emuQuerySettings(hEmu, &stSettings) != 0)
+		return;
+
+	nEmuId = emuQueryEmulatorId(hEmu);
+	if (nEmuId == EMU_IBM3270)
+		{
+		stSettings.fIbm3270Tls = (nTlsMode != CNCT_TCP_TLS_OFF);
+		if (nTlsMode == CNCT_TCP_TLS_STARTTLS)
+			stSettings.nIbm3270TlsMode = EMU_IBM3270_TLS_STARTTLS;
+		else if (nTlsMode == CNCT_TCP_TLS_IMPLICIT)
+			stSettings.nIbm3270TlsMode = EMU_IBM3270_TLS_DIRECT;
+		else
+			stSettings.nIbm3270TlsMode = EMU_IBM3270_TLS_OFF;
+		emuSetSettings(hEmu, &stSettings);
+		}
+	else if (nEmuId == EMU_IBM5250)
+		{
+		stSettings.fIbm5250Tls = (nTlsMode != CNCT_TCP_TLS_OFF);
+		stSettings.nIbm5250TlsMode =
+				(nTlsMode == CNCT_TCP_TLS_OFF) ?
+				EMU_IBM5250_TLS_OFF : EMU_IBM5250_TLS_DIRECT;
+		emuSetSettings(hEmu, &stSettings);
+		}
+	}
+
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
  * FUNCTION:
  *  tapi_SAVE_NEWPHONENUM
@@ -634,9 +840,6 @@ STATIC_FUNC int tapi_SAVE_NEWPHONENUM(HWND hwnd)
 	HHDRIVER	hhDriver;
 	LRESULT		lr, lrx;
 	PSTLINEIDS	pstLineIds = NULL;
-    #if defined(INCL_WINSOCK)
-	WCHAR		achPort[6];
-    #endif
     #if defined(INCL_MINITEL)
     HCOM    hCom;
     BOOL    fAutoDetect = FALSE;
@@ -715,7 +918,7 @@ STATIC_FUNC int tapi_SAVE_NEWPHONENUM(HWND hwnd)
 	if (IsWindowEnabled(GetDlgItem(hwnd, IDC_EB_AREACODE)))
 		{
 		GetDlgItemText(hwnd, IDC_EB_AREACODE, hhDriver->achAreaCode,
-			sizeof(hhDriver->achAreaCode));
+			sizeof(hhDriver->achAreaCode) / sizeof(WCHAR));
 		}
 
 	/* --- Get phone number --- */
@@ -723,7 +926,7 @@ STATIC_FUNC int tapi_SAVE_NEWPHONENUM(HWND hwnd)
 	if (IsWindowEnabled(GetDlgItem(hwnd, IDC_EB_PHONENUM)))
 		{
 		GetDlgItemText(hwnd, IDC_EB_PHONENUM, hhDriver->achDest,
-			sizeof(hhDriver->achDest));
+			sizeof(hhDriver->achDest) / sizeof(WCHAR));
 		}
 
     #if defined(INCL_WINSOCK)
@@ -735,11 +938,42 @@ STATIC_FUNC int tapi_SAVE_NEWPHONENUM(HWND hwnd)
 
     if (IsWindowEnabled(GetDlgItem(hwnd, IDC_EB_PORTNUM)))
         {
-		GetDlgItemText(hwnd, IDC_EB_PORTNUM, achPort,
-			sizeof(achPort));
-		hhDriver->iPort = atoi(achPort);
+		hhDriver->iPort = (int)GetDlgItemInt(hwnd, IDC_EB_PORTNUM,
+				NULL, FALSE);
         }
+
+    PhoneDlgSaveEmulator(hwnd, pS->hSession);
     #endif  // defined(INCL_WINSOCK)
+
+    #if defined(INCL_SSH)
+    if (IsWindowEnabled(GetDlgItem(hwnd, IDC_CB_TRANSPORT)))
+        {
+        switch (SendDlgItemMessage(hwnd, IDC_CB_TRANSPORT, CB_GETCURSEL, 0, 0))
+            {
+        case 1:
+            PhoneDlgApplyDirectTlsMode(hhDriver, pS->hSession,
+                    CNCT_TCP_TLS_OFF);
+            break;
+        case 2:
+            PhoneDlgApplyDirectTlsMode(hhDriver, pS->hSession,
+                    CNCT_TCP_TLS_STARTTLS);
+            break;
+        case 3:
+            PhoneDlgApplyDirectTlsMode(hhDriver, pS->hSession,
+                    CNCT_TCP_TLS_IMPLICIT);
+            break;
+        case 4:
+            hhDriver->nTransport = CNCT_TRANSPORT_SSH_INTERACTIVE;
+            hhDriver->nTcpTlsMode = CNCT_TCP_TLS_OFF;
+            break;
+        case 0:
+        default:
+            hhDriver->nTransport = CNCT_TRANSPORT_SSH_TUNNEL;
+            hhDriver->nTcpTlsMode = CNCT_TCP_TLS_OFF;
+            break;
+            }
+        }
+    #endif
 
 	/* --- Get Use country code, area code info --- */
 
@@ -1018,6 +1252,22 @@ STATIC_FUNC void ModemCheck(const HWND hwnd)
             ShowWindow(hwndTmp, fWinSock ? SW_SHOW : SW_HIDE);
             EnableWindow(hwndTmp, fWinSock);
 
+#if defined(INCL_SSH)
+            hwndTmp = GetDlgItem(hwnd, IDC_TF_TRANSPORT);
+            ShowWindow(hwndTmp, fWinSock ? SW_SHOW : SW_HIDE);
+            EnableWindow(hwndTmp, fWinSock);
+            hwndTmp = GetDlgItem(hwnd, IDC_CB_TRANSPORT);
+            ShowWindow(hwndTmp, fWinSock ? SW_SHOW : SW_HIDE);
+            EnableWindow(hwndTmp, fWinSock);
+#endif
+
+            hwndTmp = GetDlgItem(hwnd, IDC_TF_EMULATOR);
+            ShowWindow(hwndTmp, fWinSock ? SW_SHOW : SW_HIDE);
+            EnableWindow(hwndTmp, fWinSock);
+            hwndTmp = GetDlgItem(hwnd, IDC_CB_EMULATOR);
+            ShowWindow(hwndTmp, fWinSock ? SW_SHOW : SW_HIDE);
+            EnableWindow(hwndTmp, fWinSock);
+
             hwndTmp = GetDlgItem(hwnd, IDC_TF_PHONENUM);
             ShowWindow(hwndTmp, ! fWinSock);
             EnableWindow(hwndTmp, ! fWinSock);
@@ -1118,11 +1368,12 @@ static int ValidatePhoneDlg(const HWND hwnd)
  */
 static int CheckWindow(const HWND hwnd, const int id)
 	{
-	char ach[256];
+	WCHAR ach[256];
 
 	if (IsWindowEnabled(GetDlgItem(hwnd, id)))
 		{
-		if (GetDlgItemText(hwnd, id, ach, sizeof(ach)) == 0)
+		if (GetDlgItemText(hwnd, id, ach,
+				sizeof(ach) / sizeof(WCHAR)) == 0)
 			{
 			MessageBeep(MB_ICONHAND);
 			SetFocus(GetDlgItem(hwnd, id));
@@ -1215,12 +1466,14 @@ static int VerifyAddress(const HWND hwnd)
 	/* --- Get area code --- */
 
 	achAreaCode[0] = L'\0';
-	GetDlgItemText(hwnd, IDC_EB_AREACODE, achAreaCode, sizeof(achAreaCode));
+	GetDlgItemText(hwnd, IDC_EB_AREACODE, achAreaCode,
+		sizeof(achAreaCode) / sizeof(WCHAR));
 
 	/* --- Get phone number --- */
 
 	achDest[0] = L'\0';
-	GetDlgItemText(hwnd, IDC_EB_PHONENUM, achDest, sizeof(achDest));
+	GetDlgItemText(hwnd, IDC_EB_PHONENUM, achDest,
+		sizeof(achDest) / sizeof(WCHAR));
 
 	/* --- Get Use country code, area code info --- */
 
@@ -1269,15 +1522,15 @@ static int VerifyAddress(const HWND hwnd)
 
 		/* --- Put country code in now --- */
 
-		wsprintf(ach, "+%u ", pce->dwCountryCode);
+		wsprintfW(ach, L"+%u ", pce->dwCountryCode);
 		free(pcl);
 		pcl = NULL;
 
 		if (!fIsStringEmpty(achAreaCode))
 			{
-			lstrcat(ach, "(");
+			lstrcatW(ach, L"(");
 			lstrcat(ach, achAreaCode);
-			lstrcat(ach, ") ");
+			lstrcatW(ach, L") ");
 			}
 		}
 
@@ -1297,10 +1550,11 @@ static int VerifyAddress(const HWND hwnd)
 
 	/* --- Now that we've satisifed the clergy, translate it --- */
 
-	if (TRAP(lRet = lineTranslateAddress(hhDriver->hLineApp,
+	lRet = TRAP(lineTranslateAddress(hhDriver->hLineApp,
 			dwLine, TAPI_VER, ach, 0,
 				LINETRANSLATEOPTION_CANCELCALLWAITING,
-					pLnTransOutput)) != 0)
+					pLnTransOutput));
+	if (lRet != 0)
 		{
 		free(pLnTransOutput);
 		pLnTransOutput = NULL;
@@ -1510,10 +1764,10 @@ int cncttapiGetCOMSettings( const DWORD dwLineId, LPWSTR pachStr, const size_t c
 		iParity = NOPARITY;
 	if (iStopBits < 0 || iStopBits > 2)
 		iStopBits = ONESTOPBIT;
-	wsprintf(ach, "%ld %d-%c-%s", lBaud, iDataBits,
+	wsprintfW(ach, L"%ld %d-%c-%ls", lBaud, iDataBits,
     	acParity[iParity], pachStop[iStopBits]);
 #if 0	//DEADWOOD:jkh 9/9/98
-    wsprintf(ach, "%u %d-%c-%s", pDevCfg->commconfig.dcb.BaudRate,
+    wsprintfW(ach, L"%u %d-%c-%ls", pDevCfg->commconfig.dcb.BaudRate,
     	pDevCfg->commconfig.dcb.ByteSize,
     	acParity[pDevCfg->commconfig.dcb.Parity],
     	pachStop[pDevCfg->commconfig.dcb.StopBits]);
@@ -1557,12 +1811,9 @@ BOOL CALLBACK cnctwsNewPhoneDlg(HWND hwnd, UINT uMsg, WPARAM wPar, LPARAM lPar)
 	 * NOTE: these defines must match the templates in both places, here and
 	 *       int term\dialogs.rc
 	 */
-	//#define IDC_TF_PORTNUM      110
-	//#define IDC_TF_IPADDR	    108
-	
 	#define IDC_IC_ICON			101
-	#define IDC_EB_IPADDR	 	109
-	#define IDC_EB_PORTNUM		111
+	#define IDC_EB_IPADDR	 	214
+	#define IDC_EB_PORTNUM		207
 	
 	#define IDC_TB_NAME 		103
 	#define IDC_PB_EDITICON 	117
@@ -1571,7 +1822,7 @@ BOOL CALLBACK cnctwsNewPhoneDlg(HWND hwnd, UINT uMsg, WPARAM wPar, LPARAM lPar)
 	HWND	 hwndParent;
 	HHDRIVER hhDriver;
 	WCHAR	 ach[256];
-	WCHAR	 achPort[6];
+	WCHAR	 achPort[16];
 	WCHAR 	 acNameCopy[256];
 	//int 	 i;
 
@@ -1644,7 +1895,7 @@ BOOL CALLBACK cnctwsNewPhoneDlg(HWND hwnd, UINT uMsg, WPARAM wPar, LPARAM lPar)
 		if (hhDriver->achDestAddr[0])
 			SetDlgItemText(hwnd, IDC_EB_IPADDR, hhDriver->achDestAddr);
 
-		wsprintf(achPort, "%d", hhDriver->iPort);
+		wsprintfW(achPort, L"%d", hhDriver->iPort);
 		SetDlgItemText(hwnd, IDC_EB_PORTNUM, achPort);
 
 		WCHAR_Fill(pS->acSessNameCopy, L'\0',
@@ -1779,7 +2030,6 @@ STATIC_FUNC int wsck_SAVE_NEWIPADDR(HWND hwnd)
 	int			iErr = 0;
 	pSDS		pS;
 	HHDRIVER	hhDriver;
-	WCHAR		achPort[6];
 
 	pS = (pSDS)GetWindowLongPtr(hwnd, DWLP_USER);
 	hhDriver = (HHDRIVER)(pS->hDriver);
@@ -1789,9 +2039,8 @@ STATIC_FUNC int wsck_SAVE_NEWIPADDR(HWND hwnd)
 
 	if (IsWindowEnabled(GetDlgItem(hwnd, IDC_EB_PORTNUM)))
 		{
-		GetDlgItemText(hwnd, IDC_EB_PORTNUM, achPort,
-			sizeof(achPort));
-		hhDriver->iPort = atoi(achPort);
+		hhDriver->iPort = (int)GetDlgItemInt(hwnd, IDC_EB_PORTNUM,
+				NULL, FALSE);
 		}
 	else
 		{

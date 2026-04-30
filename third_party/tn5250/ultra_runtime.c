@@ -1,5 +1,5 @@
 /*
- * UltraTerminal embedded IBM 5250/TN5250 runtime.
+ * UltraTerminal embedded IBM 5250 runtime.
  */
 #include "ultra_runtime.h"
 #include "ultra_stream.h"
@@ -189,7 +189,7 @@ int ut5250_runtime_create(UT5250_RUNTIME** out_runtime,
         return -1;
         }
     if (runtime->settings.tls_mode == UT5250_TLS_DIRECT &&
-            tn5250_ultra_stream_enable_tls(runtime->stream,
+            ibm5250_ultra_stream_enable_tls(runtime->stream,
                 runtime->settings.verify_tls,
                 runtime->settings.ca_path,
                 runtime->settings.cert_path,
@@ -243,7 +243,7 @@ int ut5250_runtime_connected(UT5250_RUNTIME* runtime, unsigned char* out,
         return -1;
 
     runtime->connected = 1;
-    rc = tn5250_ultra_stream_start(runtime->stream, out, out_limit, out_len);
+    rc = ibm5250_ultra_stream_start(runtime->stream, out, out_limit, out_len);
     if (runtime->settings.tls_mode == UT5250_TLS_DIRECT)
         ut5250_set_status(runtime,
                 "IBM 5250 TLS handshake started");
@@ -264,19 +264,19 @@ int ut5250_runtime_feed_bytes(UT5250_RUNTIME* runtime,
             data_len <= 0)
         return -1;
 
-    rc = tn5250_ultra_stream_feed(runtime->stream, data, data_len, out,
+    rc = ibm5250_ultra_stream_feed(runtime->stream, data, data_len, out,
             out_limit, out_len);
     if (rc < 0)
         {
-        tn5250_ultra_stream_end_output(runtime->stream);
+        ibm5250_ultra_stream_end_output(runtime->stream);
         return rc;
         }
 
     tn5250_session_pump_pending(runtime->session);
-    runtime->tls_active = tn5250_ultra_stream_tls_active(runtime->stream);
+    runtime->tls_active = ibm5250_ultra_stream_tls_active(runtime->stream);
     if (runtime->tls_active)
         ut5250_set_status(runtime, "IBM 5250 TLS active");
-    tn5250_ultra_stream_end_output(runtime->stream);
+    ibm5250_ultra_stream_end_output(runtime->stream);
     return 0;
     }
 
@@ -291,7 +291,7 @@ int ut5250_runtime_key(UT5250_RUNTIME* runtime, int action, int ch,
             runtime->stream == NULL)
         return -1;
 
-    if (tn5250_ultra_stream_begin_output(runtime->stream, out, out_limit,
+    if (ibm5250_ultra_stream_begin_output(runtime->stream, out, out_limit,
             out_len) < 0)
         return -1;
 
@@ -301,9 +301,12 @@ int ut5250_runtime_key(UT5250_RUNTIME* runtime, int action, int ch,
         key = ut5250_map_key(action);
 
     if (key != K_UNKNOW)
+        {
         tn5250_display_do_key(runtime->display, key);
+        tn5250_display_update(runtime->display);
+        }
 
-    tn5250_ultra_stream_end_output(runtime->stream);
+    ibm5250_ultra_stream_end_output(runtime->stream);
     return (key == K_UNKNOW) ? -1 : 0;
     }
 
@@ -366,7 +369,7 @@ int ut5250_runtime_snapshot(UT5250_RUNTIME* runtime,
             cell->raw = raw;
             cell->field_attr = current_attr;
             cell->foreground = ut5250_cell_color(current_attr);
-            cell->background = 0;
+            cell->background = 0xff;
             cell->flags = ut5250_cell_flags(current_attr, field);
 
             if ((raw & 0xe0) == 0x20)

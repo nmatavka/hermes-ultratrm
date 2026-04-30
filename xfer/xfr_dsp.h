@@ -17,7 +17,7 @@ extern void xferMsgProgress(HSESSION hSession,
 
 extern void xferMsgNewfile(HSESSION hSession,
 						   int filen,
-						   BYTE *theirname,
+						   const void *theirname,
 						   WCHAR *ourname);
 
 extern void xferMsgFilesize(HSESSION hSession, long fsize);
@@ -47,4 +47,3 @@ extern void xferMsgPacketErrcnt(HSESSION hSession, int event);
 extern void xferMsgProtocol(HSESSION hSession, int nProtocol);
 
 extern void xferMsgMessage(HSESSION hSession, BYTE *pszMsg);
-

@@ -11,6 +11,8 @@
 #pragma hdrstop
 
 #include <term/res.h>
+#include <stdlib.h>
+#include <wchar.h>
 
 #include "stdtyp.h"
 #include "mc.h"
@@ -209,7 +211,7 @@ int printInitializeHdl(const HPRINT hPrint)
 		if (LoadString(glblQueryDllHinst(), IDS_PRINT_DEF_CHARSET,
 			achBuf, sizeof(achBuf) / sizeof(WCHAR)))
 			{
-			nCharSet = atoi(achBuf);
+			nCharSet = (int)wcstol(achBuf, NULL, 10);
 			hhPrint->lf.lfCharSet = (BYTE)nCharSet;
 			}
 		

@@ -11,6 +11,8 @@
 #pragma hdrstop
 
 #include <commctrl.h>
+#include <stdlib.h>
+#include <wchar.h>
 
 #include <tdll/features.h>
 
@@ -33,7 +35,7 @@
 #include <emu/emu.h>
 #if defined(INCL_MINITEL)
 #include "com.h"
-#include "COMDEV.H"
+#include "comdev.h"
 #include "com.hh"
 #endif // INCL_MINITEL
 #include <emu/emudlgs.h>
@@ -523,12 +525,12 @@ void propLoadEmulationCombo(const HWND hDlg, const HSESSION hSession)
 		if (i == IDS_EMUNAME_VTUTF8)
 			continue;
 		#endif
-		#if !defined(INCL_TN3270)
-		if (i == IDS_EMUNAME_TN3270)
+		#if !defined(INCL_IBM3270)
+		if (i == IDS_EMUNAME_IBM3270)
 			continue;
 		#endif
-		#if !defined(INCL_TN5250)
-		if (i == IDS_EMUNAME_TN5250)
+		#if !defined(INCL_IBM5250)
+		if (i == IDS_EMUNAME_IBM5250)
 			continue;
 		#endif
 		#if !defined(INCL_VIDEOTEX)
@@ -979,7 +981,7 @@ STATIC_FUNC int propValidateBackscrlSize(HWND hDlg)
 	WCHAR_Fill(acBuffer, L'\0', sizeof(acBuffer) / sizeof(WCHAR));
 	GetDlgItemText(hDlg, IDC_TERMINAL_EF_BACKSCRL, acBuffer, sizeof(acBuffer));
 
-	nNewValue = nValue = atoi(acBuffer);
+	nNewValue = nValue = (int)wcstol(acBuffer, NULL, 10);
 	if (nValue > BKSCRL_USERLINES_DEFAULT_MAX)
 		nNewValue = BKSCRL_USERLINES_DEFAULT_MAX;
 	else if (nValue < BKSCRL_USERLINES_DEFAULT_MIN)

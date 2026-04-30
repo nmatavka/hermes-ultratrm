@@ -1,5 +1,5 @@
 /*
- * UltraTerminal nonblocking TN5250 stream.
+ * UltraTerminal nonblocking IBM 5250 stream.
  *
  * This file adapts tn5250's Telnet/EOR framing to UltraTerminal's existing
  * socket ownership. Incoming bytes are supplied by comwsock and outgoing bytes
@@ -8,7 +8,7 @@
 #include "ultra_stream.h"
 #include "lib5250/tn5250-private.h"
 
-#if defined(ULTRATERMINAL_TN5250_HAVE_OPENSSL)
+#if defined(ULTRATERMINAL_IBM5250_HAVE_OPENSSL)
 #include <openssl/err.h>
 #include <openssl/ssl.h>
 #endif
@@ -51,7 +51,7 @@ typedef struct ut5250_stream_state
     int* out_len;
     unsigned char verb;
     int telnet_started;
-#if defined(ULTRATERMINAL_TN5250_HAVE_OPENSSL)
+#if defined(ULTRATERMINAL_IBM5250_HAVE_OPENSSL)
     SSL_CTX* tls_ctx;
     SSL* tls_ssl;
     BIO* tls_rbio;
@@ -84,7 +84,7 @@ static void ultra_stream_sb_var_value(Tn5250Buffer* buf, unsigned char* var,
 static void ultra_stream_escape(Tn5250Buffer* buffer);
 static void ultra_stream_error(char* error, int error_len, const char* text);
 
-#if defined(ULTRATERMINAL_TN5250_HAVE_OPENSSL)
+#if defined(ULTRATERMINAL_IBM5250_HAVE_OPENSSL)
 static int ultra_stream_tls_drive(Tn5250Stream* stream);
 static int ultra_stream_tls_drain(Tn5250Stream* stream);
 static int ultra_stream_tls_feed(Tn5250Stream* stream, const unsigned char* data,
@@ -96,7 +96,7 @@ static int ultra_stream_tls_feed_plain(Tn5250Stream* stream,
 static int ultra_stream_tls_error(Tn5250Stream* stream, int rc);
 #endif
 
-int tn5250_ultra_stream_init(Tn5250Stream* stream)
+int ibm5250_ultra_stream_init(Tn5250Stream* stream)
     {
     UT5250_STREAM_STATE* state;
 
@@ -114,13 +114,13 @@ int tn5250_ultra_stream_init(Tn5250Stream* stream)
     return 0;
     }
 
-int tn5250_ultra_stream_start(Tn5250Stream* stream, unsigned char* out,
+int ibm5250_ultra_stream_start(Tn5250Stream* stream, unsigned char* out,
         int out_limit, int* out_len)
     {
-    if (tn5250_ultra_stream_begin_output(stream, out, out_limit, out_len) < 0)
+    if (ibm5250_ultra_stream_begin_output(stream, out, out_limit, out_len) < 0)
         return -1;
 
-#if defined(ULTRATERMINAL_TN5250_HAVE_OPENSSL)
+#if defined(ULTRATERMINAL_IBM5250_HAVE_OPENSSL)
     {
     UT5250_STREAM_STATE* state;
 
@@ -129,7 +129,7 @@ int tn5250_ultra_stream_start(Tn5250Stream* stream, unsigned char* out,
         {
         if (ultra_stream_tls_drive(stream) < 0)
             return -1;
-        return tn5250_ultra_stream_end_output(stream);
+        return ibm5250_ultra_stream_end_output(stream);
         }
     }
 #endif
@@ -137,10 +137,10 @@ int tn5250_ultra_stream_start(Tn5250Stream* stream, unsigned char* out,
     if (ultra_stream_start_telnet(stream) < 0)
         return -1;
 
-    return tn5250_ultra_stream_end_output(stream);
+    return ibm5250_ultra_stream_end_output(stream);
     }
 
-int tn5250_ultra_stream_feed(Tn5250Stream* stream, const unsigned char* data,
+int ibm5250_ultra_stream_feed(Tn5250Stream* stream, const unsigned char* data,
         int data_len, unsigned char* out, int out_limit, int* out_len)
     {
     UT5250_STREAM_STATE* state;
@@ -149,7 +149,7 @@ int tn5250_ultra_stream_feed(Tn5250Stream* stream, const unsigned char* data,
     if (stream == NULL || stream->userdata == NULL)
         return -1;
 
-    if (tn5250_ultra_stream_begin_output(stream, out, out_limit, out_len) < 0)
+    if (ibm5250_ultra_stream_begin_output(stream, out, out_limit, out_len) < 0)
         return -1;
 
     state = (UT5250_STREAM_STATE*)stream->userdata;
@@ -157,7 +157,7 @@ int tn5250_ultra_stream_feed(Tn5250Stream* stream, const unsigned char* data,
     state->in_len = data_len;
     state->in_pos = 0;
 
-#if defined(ULTRATERMINAL_TN5250_HAVE_OPENSSL)
+#if defined(ULTRATERMINAL_IBM5250_HAVE_OPENSSL)
     if (state->tls_requested)
         {
         rc = ultra_stream_tls_feed(stream, data, data_len);
@@ -176,7 +176,7 @@ int tn5250_ultra_stream_feed(Tn5250Stream* stream, const unsigned char* data,
     return rc ? 0 : -1;
     }
 
-int tn5250_ultra_stream_enable_tls(Tn5250Stream* stream, int verify_tls,
+int ibm5250_ultra_stream_enable_tls(Tn5250Stream* stream, int verify_tls,
         const char* ca_path, const char* cert_path, const char* key_path,
         char* error, int error_len)
     {
@@ -184,13 +184,13 @@ int tn5250_ultra_stream_enable_tls(Tn5250Stream* stream, int verify_tls,
 
     if (stream == NULL || stream->userdata == NULL)
         {
-        ultra_stream_error(error, error_len, "Invalid TN5250 stream.");
+        ultra_stream_error(error, error_len, "Invalid IBM 5250 stream.");
         return -1;
         }
 
     state = (UT5250_STREAM_STATE*)stream->userdata;
 
-#if defined(ULTRATERMINAL_TN5250_HAVE_OPENSSL)
+#if defined(ULTRATERMINAL_IBM5250_HAVE_OPENSSL)
     OPENSSL_init_ssl(0, NULL);
     state->tls_ctx = SSL_CTX_new(TLS_client_method());
     if (state->tls_ctx == NULL)
@@ -206,7 +206,7 @@ int tn5250_ultra_stream_enable_tls(Tn5250Stream* stream, int verify_tls,
         if (ca_path && ca_path[0] &&
                 SSL_CTX_load_verify_locations(state->tls_ctx, ca_path, NULL) != 1)
             {
-            ultra_stream_error(error, error_len, "Could not load TN5250 CA file.");
+            ultra_stream_error(error, error_len, "Could not load IBM 5250 CA file.");
             return -1;
             }
         }
@@ -220,7 +220,7 @@ int tn5250_ultra_stream_enable_tls(Tn5250Stream* stream, int verify_tls,
                 SSL_FILETYPE_PEM) != 1)
         {
         ultra_stream_error(error, error_len,
-                "Could not load TN5250 client certificate.");
+                "Could not load IBM 5250 client certificate.");
         return -1;
         }
     if (key_path && key_path[0] &&
@@ -228,7 +228,7 @@ int tn5250_ultra_stream_enable_tls(Tn5250Stream* stream, int verify_tls,
                 SSL_FILETYPE_PEM) != 1)
         {
         ultra_stream_error(error, error_len,
-                "Could not load TN5250 client private key.");
+                "Could not load IBM 5250 client private key.");
         return -1;
         }
 
@@ -238,7 +238,7 @@ int tn5250_ultra_stream_enable_tls(Tn5250Stream* stream, int verify_tls,
     if (state->tls_ssl == NULL || state->tls_rbio == NULL ||
             state->tls_wbio == NULL)
         {
-        ultra_stream_error(error, error_len, "Could not initialize TN5250 TLS.");
+        ultra_stream_error(error, error_len, "Could not initialize IBM 5250 TLS.");
         return -1;
         }
 
@@ -255,14 +255,14 @@ int tn5250_ultra_stream_enable_tls(Tn5250Stream* stream, int verify_tls,
     (void)cert_path;
     (void)key_path;
     ultra_stream_error(error, error_len,
-            "TN5250 TLS was not compiled into this build.");
+            "IBM 5250 TLS was not compiled into this build.");
     return -1;
 #endif
     }
 
-int tn5250_ultra_stream_tls_active(Tn5250Stream* stream)
+int ibm5250_ultra_stream_tls_active(Tn5250Stream* stream)
     {
-#if defined(ULTRATERMINAL_TN5250_HAVE_OPENSSL)
+#if defined(ULTRATERMINAL_IBM5250_HAVE_OPENSSL)
     UT5250_STREAM_STATE* state;
 
     if (stream == NULL || stream->userdata == NULL)
@@ -275,7 +275,7 @@ int tn5250_ultra_stream_tls_active(Tn5250Stream* stream)
 #endif
     }
 
-int tn5250_ultra_stream_begin_output(Tn5250Stream* stream, unsigned char* out,
+int ibm5250_ultra_stream_begin_output(Tn5250Stream* stream, unsigned char* out,
         int out_limit, int* out_len)
     {
     UT5250_STREAM_STATE* state;
@@ -292,7 +292,7 @@ int tn5250_ultra_stream_begin_output(Tn5250Stream* stream, unsigned char* out,
     return 0;
     }
 
-int tn5250_ultra_stream_end_output(Tn5250Stream* stream)
+int ibm5250_ultra_stream_end_output(Tn5250Stream* stream)
     {
     UT5250_STREAM_STATE* state;
 
@@ -322,7 +322,7 @@ static void ultra_stream_destroy(Tn5250Stream* stream)
     {
     if (stream->userdata)
         {
-#if defined(ULTRATERMINAL_TN5250_HAVE_OPENSSL)
+#if defined(ULTRATERMINAL_IBM5250_HAVE_OPENSSL)
         UT5250_STREAM_STATE* state;
 
         state = (UT5250_STREAM_STATE*)stream->userdata;
@@ -682,7 +682,7 @@ static int ultra_stream_start_telnet(Tn5250Stream* stream)
 static int ultra_stream_append(Tn5250Stream* stream, const unsigned char* data,
         int len)
     {
-#if defined(ULTRATERMINAL_TN5250_HAVE_OPENSSL)
+#if defined(ULTRATERMINAL_IBM5250_HAVE_OPENSSL)
     UT5250_STREAM_STATE* state;
 
     state = (UT5250_STREAM_STATE*)stream->userdata;
@@ -730,7 +730,7 @@ static void ultra_stream_error(char* error, int error_len, const char* text)
     error[error_len - 1] = '\0';
     }
 
-#if defined(ULTRATERMINAL_TN5250_HAVE_OPENSSL)
+#if defined(ULTRATERMINAL_IBM5250_HAVE_OPENSSL)
 static int ultra_stream_tls_drive(Tn5250Stream* stream)
     {
     UT5250_STREAM_STATE* state;

@@ -219,9 +219,9 @@ LPWSTR gnrcFindFileDialogInternal(HWND hwnd,
 
     iSize = StrCharGetByteCount(pszInitName);
     //MPT:10SEP98 if there is no name, just set the dest string to nothing
-	if( iSize <= FNAME_LEN && pszInitName && iSize > 0)
+	if (pszInitName && iSize > 0 && iSize < (int)sizeof(szFile))
 		{
-		MemCopy(szFile, pszInitName, iSize);
+		MemCopy(szFile, pszInitName, (size_t)iSize);
 		}
     else
         {
@@ -322,11 +322,12 @@ LPWSTR gnrcFindFileDialogInternal(HWND hwnd,
 
 		if (iSize > 0)
 			{
-			pszRet = malloc(ofn.nMaxFile);
+			size_t const cchRet = (size_t)ofn.nMaxFile + 1;
+			pszRet = malloc(cchRet * sizeof(WCHAR));
 
 			if (pszRet != NULL)
 				{
-				WCHAR_Fill(pszRet, L'\0', ofn.nMaxFile);
+				WCHAR_Fill(pszRet, L'\0', cchRet);
 
 				// Due to a bug in GetSaveFileName(), it is possible
 				// the file will not contain the default extension if
@@ -347,7 +348,7 @@ LPWSTR gnrcFindFileDialogInternal(HWND hwnd,
 
 				// make sure this is a NULL terminated string.
 				//
-				pszRet[ofn.nMaxFile - 1] = L'\0';
+				pszRet[cchRet - 1] = L'\0';
 				}
 
 			return pszRet;
@@ -538,7 +539,7 @@ LPWSTR gnrcFindDirectoryDialog(HWND hwnd, HSESSION hSession, LPWSTR pszDir)
 
 	fileFinalizeDIR(hSession, szFile, szFile);
 
-	pszStr = malloc(StrCharGetByteCount(szFile) + 1);
+	pszStr = malloc((size_t)StrCharGetByteCount(szFile) + sizeof(WCHAR));
 	StrCharCopy(pszStr, szFile);
 
 	return pszStr;
@@ -640,9 +641,9 @@ DWORD GetUserDirectory(LPWSTR pszUserDir, DWORD dwSize)
         //    L'\\' != szProfileDir[StrCharGetStrLength(szProfileDir)-1])
 
 
-        strcat( szProfileDir, L"\\" );
+        lstrcatW( szProfileDir, L"\\" );
 
-        strcat( szProfileDir, szProfileDir1 );
+        lstrcatW( szProfileDir, szProfileDir1 );
 
 
         dwRet = StrCharGetStrLength(szProfileRoot) + StrCharGetStrLength(szProfileDir);

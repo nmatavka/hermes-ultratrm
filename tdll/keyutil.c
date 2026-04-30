@@ -241,7 +241,7 @@ int keysGetDisplayString( KEYDEF * pKeydef, int aNumKeys, LPWSTR aDisplayString,
         if ( lKey & CTRL_KEY || lKey & ALT_KEY || lKey & SHIFT_KEY ||
              lKey & VIRTUAL_KEY )
             {
-            strcat( aDisplayString, L"<" );
+            lstrcatW( aDisplayString, L"<" );
             fSpecial = TRUE;
             }
 
@@ -255,7 +255,7 @@ int keysGetDisplayString( KEYDEF * pKeydef, int aNumKeys, LPWSTR aDisplayString,
                 return 0;
                 }
 
-            strcat( aDisplayString, lKeyBuffer );
+            lstrcatW( aDisplayString, lKeyBuffer );
             }
 
         if ( lKey & ALT_KEY )
@@ -268,7 +268,7 @@ int keysGetDisplayString( KEYDEF * pKeydef, int aNumKeys, LPWSTR aDisplayString,
                 return 0;
                 }
 
-            strcat( aDisplayString, lKeyBuffer );
+            lstrcatW( aDisplayString, lKeyBuffer );
             }
 
         if ( lKey & SHIFT_KEY )
@@ -280,7 +280,7 @@ int keysGetDisplayString( KEYDEF * pKeydef, int aNumKeys, LPWSTR aDisplayString,
                 return 0;
                 }
 
-            strcat( aDisplayString, lKeyBuffer );
+            lstrcatW( aDisplayString, lKeyBuffer );
             }
 
         //
@@ -300,7 +300,7 @@ int keysGetDisplayString( KEYDEF * pKeydef, int aNumKeys, LPWSTR aDisplayString,
                 return 0;
                 }
 
-            strcat( aDisplayString, lKeyBuffer );
+            lstrcatW( aDisplayString, lKeyBuffer );
             }
         else
             {
@@ -315,7 +315,7 @@ int keysGetDisplayString( KEYDEF * pKeydef, int aNumKeys, LPWSTR aDisplayString,
                 return 0;
                 }
 
-            strcat( aDisplayString, lKeyBuffer );
+            lstrcatW( aDisplayString, lKeyBuffer );
             }
 
         //
@@ -324,7 +324,7 @@ int keysGetDisplayString( KEYDEF * pKeydef, int aNumKeys, LPWSTR aDisplayString,
 
         if ( fSpecial )
             {
-            strcat( aDisplayString, L">" );
+            lstrcatW( aDisplayString, L">" );
             }
         }
 

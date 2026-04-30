@@ -232,12 +232,14 @@ int keysLoadSummaryList( HWND listBox )
         WCHAR lBuffer[2048];
         memset( lBuffer, L'\0', sizeof(lBuffer)/sizeof(WCHAR) );
 
-        keysGetDisplayString( &lMacro.mKey, 1, lKeyName, sizeof(lKeyName) );
-        strcat( lBuffer, lKeyName );
-        strcat( lBuffer, L"\t" );
+        keysGetDisplayString( &lMacro.mKey, 1, lKeyName,
+                sizeof(lKeyName) / sizeof(WCHAR) );
+        lstrcatW( lBuffer, lKeyName );
+        lstrcatW( lBuffer, L"\t" );
 
-        keysGetDisplayString( lMacro.mKeyMacro, lMacro.mMacroLen, lKeyName, sizeof(lKeyName) );
-        strcat( lBuffer, lKeyName );
+        keysGetDisplayString( lMacro.mKeyMacro, lMacro.mMacroLen, lKeyName,
+                sizeof(lKeyName) / sizeof(WCHAR) );
+        lstrcatW( lBuffer, lKeyName );
         
         listIndex = SendMessage( listBox, LB_ADDSTRING, 0, (LPARAM)lBuffer );
         assert( listIndex != LB_ERR );

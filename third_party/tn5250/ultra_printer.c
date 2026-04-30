@@ -1,7 +1,7 @@
 /*
  * UltraTerminal 5250 printer helper.
  *
- * The helper can run a standalone tn5250 printer session when a host is
+ * The helper can run a standalone IBM 5250 printer session when a host is
  * supplied. UltraTerminal launches it as a sibling process and reports startup
  * failures gracefully when Wine or Windows printing is unavailable.
  */

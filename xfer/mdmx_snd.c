@@ -532,7 +532,7 @@ STATIC_FUNC int xsend_start(ST_MDMX *xc, BYTE *start_chars, int *start_char)
 			return(TSC_RMT_CANNED);
 
 		default:
-			if (strchr(start_chars, *start_char))
+			if (strchr((const char *)start_chars, *start_char))
 				{
 				return(TSC_OK);
 				}
@@ -681,7 +681,7 @@ STATIC_FUNC void make_file_pckt(ST_MDMX *xc,
 	/* calculate CRC value */
 	ptr = &p->bdata[SMALL_PACKET];	/* set ptr to char after buffer */
 									/* calculate CRC			*/
-	crc = calc_crc(xc, (unsigned)0, p->bdata, SMALL_PACKET+2);
+	crc = calc_crc(xc, (unsigned)0, (LPSTR)p->bdata, SMALL_PACKET+2);
 									/* set the CRC				*/
 	*ptr++ = (BYTE)(crc / 0x100);
 	*ptr = (BYTE)(crc % 0x100);

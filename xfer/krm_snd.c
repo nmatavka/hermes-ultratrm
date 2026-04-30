@@ -330,7 +330,7 @@ void build_attributes(ST_KRM *kc,
 int ksend_init(ST_KRM *kc)
 	{
 	unsigned plen;				/* length of outgoing packet data */
-	char rpacket[MAXPCKT];		/* space to receive response packet */
+	unsigned char rpacket[MAXPCKT];		/* space to receive response packet */
 	int rlen, rseq; 			/* length and sequence of response packet */
 	int tries = 0;
 
@@ -390,7 +390,7 @@ int ksend_init(ST_KRM *kc)
 		case 'E':
 			/* received error packet, abort transfer */
 			xferMsgLasterror(kc->hSession, KE_RMTERR);
-			strncpy(kc->xtra_err, rpacket, (unsigned)65);
+			strncpy(kc->xtra_err, (const char *)rpacket, (unsigned)65);
 			kc->abort_code = KA_RMTERR;
 			return(FALSE);
 			/*lint -unreachable*/
@@ -424,7 +424,7 @@ int ksend_init(ST_KRM *kc)
  */
 int ksend_break(ST_KRM *kc)
 	{
-	char rpacket[MAXPCKT];		/* space to receive response packet */
+	unsigned char rpacket[MAXPCKT];		/* space to receive response packet */
 	int rlen, rseq; 			/* length and sequence of response packet */
 	int tries = 0;
 
@@ -504,7 +504,7 @@ int ksend_file(ST_KRM *kc, long fsize)
 	int 		kbd_abort = KA_OK;
 	char		rtype;
 	int 		rlen, rseq;
-	char		rpacket[MAXPCKT];
+	unsigned char	rpacket[MAXPCKT];
 	int			sendattr;
 	KPCKT 		*tmp;
 

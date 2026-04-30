@@ -8,8 +8,6 @@
 #include <windows.h>
 #pragma hdrstop
 
-#define ARRAYSIZE(rg) (sizeof(rg)/sizeof((rg)[0]))
-
 // #define	DEBUGSTR	1
 
 #define	DO_RAW_MODE	1
@@ -199,17 +197,17 @@ int InitializeCaptureFileHandle(const HSESSION hSession, HCAPTUREFILE hCapt)
 				IDS_CPF_CAP_FILE,
 				pszStr,
 				(int)(sizeof(acBuffer) - (pszStr - acBuffer) / sizeof(WCHAR)));
-	nLen = StrCharGetByteCount(acBuffer) + 1;
+	nLen = StrCharGetByteCount(acBuffer) + (int)sizeof(WCHAR);
 
 	if (pST->pszInternalCaptureName != (LPWSTR)0)
 		{
 		free(pST->pszInternalCaptureName);
 		pST->pszInternalCaptureName = NULL;
 		}
-	pST->pszInternalCaptureName = (LPWSTR)malloc((unsigned int)nLen * sizeof(WCHAR));
+	pST->pszInternalCaptureName = (LPWSTR)malloc((size_t)nLen);
 	if (pST->pszInternalCaptureName == (LPWSTR)0)
 		goto ICFHexit;
-        StrCharCopyN(pST->pszInternalCaptureName, acBuffer, nLen * sizeof(WCHAR));
+	StrCharCopy(pST->pszInternalCaptureName, acBuffer);
 
 	if (pST->pszDefaultCaptureName != (LPWSTR)0)
 		free(pST->pszDefaultCaptureName);
@@ -265,7 +263,7 @@ ICFHexit:
 int LoadCaptureFileHandle(HCAPTUREFILE hCapt)
 	{
 	int nRet = 0;
-	long lSize;
+	unsigned long lSize;
 	STCAPTURE *pOld;
 
 	pOld = (STCAPTURE *)hCapt;
@@ -325,11 +323,13 @@ int LoadCaptureFileHandle(HCAPTUREFILE hCapt)
 		LPWSTR pszName;
 
 		pszName = (LPWSTR)0;
-		pszName = malloc((unsigned int)lSize);
+		pszName = malloc((size_t)lSize + sizeof(WCHAR));
 		if (!pszName)
 			{
 			return CPF_NO_MEMORY;
 			}
+		WCHAR_Fill(pszName, L'\0',
+			((size_t)lSize + sizeof(WCHAR)) / sizeof(WCHAR));
 		sfGetSessionItem(sessQuerySysFileHdl(pOld->hSession),
 						SFID_CPF_FILENAME,
 						&lSize, pszName);
@@ -367,7 +367,7 @@ int LoadCaptureFileHandle(HCAPTUREFILE hCapt)
 int SaveCaptureFileHandle(HCAPTUREFILE hCapt)
 	{
 	STCAPTURE *pST;
-	long lSize;
+	unsigned long lSize;
 
 	pST = (STCAPTURE *)hCapt;
 	assert(pST);
@@ -377,11 +377,10 @@ int SaveCaptureFileHandle(HCAPTUREFILE hCapt)
 		/* Need to save the new value */
 		if (pST->pszDefaultCaptureName)
 			{
-			lSize = StrCharGetByteCount(pST->pszDefaultCaptureName);
+			lSize = (unsigned long)StrCharGetByteCount(pST->pszDefaultCaptureName);
 			if (lSize > 0)
 				{
-				lSize += 1;
-				lSize *= sizeof(WCHAR);
+				lSize += sizeof(WCHAR);
 
 				sfPutSessionItem(sessQuerySysFileHdl(pST->hSession),
 								SFID_CPF_FILENAME,
@@ -480,11 +479,11 @@ int cpfSetCaptureFilename(HCAPTUREFILE hCapt,
 
 	if (pST != (STCAPTURE *)0)
 		{
-		nLen = StrCharGetByteCount(pszName) + 1;
+		nLen = StrCharGetByteCount(pszName) + (int)sizeof(WCHAR);
 		pszTemp = (LPWSTR)0;
 		pszDefault = (LPWSTR)0;
 
-		pszTemp = (LPWSTR)malloc((unsigned int)nLen * sizeof(WCHAR));
+		pszTemp = (LPWSTR)malloc((size_t)nLen);
 		if (pszTemp == (LPWSTR)0)
 			{
 			nRet = CPF_NO_MEMORY;
@@ -493,7 +492,7 @@ int cpfSetCaptureFilename(HCAPTUREFILE hCapt,
 		StrCharCopy(pszTemp, pszName);
 		if (nMode)
 			{
-			pszDefault = (LPWSTR)malloc((unsigned int)nLen * sizeof(WCHAR));
+			pszDefault = (LPWSTR)malloc((size_t)nLen);
 			if (pszDefault == (LPWSTR)0)
 				{
 				nRet = CPF_NO_MEMORY;

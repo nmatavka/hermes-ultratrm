@@ -29,10 +29,16 @@
 
 static PSTOPT LookupOption( ST_STDCOM *hhDriver, ECHAR mc );
 static HEMU WinSockQueryEmu(ST_STDCOM *hhDriver);
-static VOID WinSockSendTN3270DeviceType(ST_STDCOM *hhDriver);
-static VOID WinSockSendTN3270Functions(ST_STDCOM *hhDriver);
-static VOID WinSockProcessTN3270ESubneg(ST_STDCOM *hhDriver);
+static VOID WinSockSendIbm3270DeviceType(ST_STDCOM *hhDriver);
+static VOID WinSockSendIbm3270Functions(ST_STDCOM *hhDriver);
+static VOID WinSockProcessIbm3270TelnetSubneg(ST_STDCOM *hhDriver);
+static VOID WinSockProcessStartTlsSubneg(ST_STDCOM *hhDriver);
 static VOID WinSockAppendSubnegByte(ST_STDCOM *hhDriver, UCHAR ch);
+static VOID WinSockSendStartTlsFollows(ST_STDCOM *hhDriver);
+static VOID WinSockProtocolStringCopy(char *pszDest, size_t cchDest,
+		const char *pszSrc);
+static VOID WinSockWideToProtocolAscii(char *pszDest, int cchDest,
+		const WCHAR *pszSrc);
 
 
 	// This is the "Network Virtual Terminal" emulation, i.e., the code
@@ -71,6 +77,7 @@ VOID WinSockCreateNVT(ST_STDCOM * hhDriver)
     hhDriver->stMode[NAWS_MODE].option   = TELOPT_NAWS;
     hhDriver->stMode[EOR_MODE].option    = TELOPT_EOR;
     hhDriver->stMode[TN3270E_MODE].option = TELOPT_TN3270E;
+    hhDriver->stMode[STARTTLS_MODE].option = TELOPT_STARTTLS;
 
 	for (ix = 0; ix < MODE_MAX; ++ix)	//jkh 6/18/98
 		{
@@ -78,14 +85,31 @@ VOID WinSockCreateNVT(ST_STDCOM * hhDriver)
 		hhDriver->stMode[ix].usq = hhDriver->stMode[ix].himq = EMPTY;
 		}
 
-	hhDriver->fTn3270Mode = FALSE;
-	hhDriver->fTn3270E = FALSE;
-	hhDriver->fTn3270EReady = FALSE;
-	hhDriver->cbTn3270Record = 0;
+	hhDriver->fIbm3270Mode = FALSE;
+	hhDriver->fIbm3270E = FALSE;
+	hhDriver->fIbm3270EReady = FALSE;
+	hhDriver->cbIbm3270Record = 0;
 	hhDriver->nSbOption = 0;
 	hhDriver->nSbLen = 0;
 	hhDriver->fSbIac = FALSE;
 	}
+
+	VOID WinSockRequestStartTls(ST_STDCOM *hhDriver)
+		{
+		PSTOPT pstO;
+
+		if (hhDriver == 0 || !hhDriver->fStartTlsRequested ||
+				hhDriver->fStartTlsActive || hhDriver->fImplicitTlsActive)
+			return;
+
+		pstO = LookupOption(hhDriver, TELOPT_STARTTLS);
+		if (pstO != 0 && pstO->him == NO)
+			{
+			pstO->him = WANTYES;
+			pstO->himq = EMPTY;
+			}
+		WinSockSendMessage(hhDriver, DO, TELOPT_STARTTLS);
+		}
 
 static HEMU WinSockQueryEmu(ST_STDCOM *hhDriver)
 	{
@@ -100,30 +124,30 @@ static HEMU WinSockQueryEmu(ST_STDCOM *hhDriver)
 	return sessQueryEmuHdl(hSession);
 	}
 
-int WinSockIsTN3270(ST_STDCOM *hhDriver)
+int WinSockIsIbm3270(ST_STDCOM *hhDriver)
 	{
 	HEMU hEmu;
 
 	if (hhDriver == 0)
 		return FALSE;
 
-	if (hhDriver->fTn3270Mode)
+	if (hhDriver->fIbm3270Mode)
 		return TRUE;
 
 	hEmu = WinSockQueryEmu(hhDriver);
-	return (hEmu && emuQueryEmulatorId(hEmu) == EMU_TN3270) ? TRUE : FALSE;
+	return (hEmu && emuQueryEmulatorId(hEmu) == EMU_IBM3270) ? TRUE : FALSE;
 	}
 
-VOID WinSockMaybeStartTN3270(ST_STDCOM *hhDriver)
+VOID WinSockMaybeStartIbm3270Telnet(ST_STDCOM *hhDriver)
 	{
-	if (!WinSockIsTN3270(hhDriver))
+	if (!WinSockIsIbm3270(hhDriver))
 		return;
 
-	hhDriver->fTn3270Mode = TRUE;
+	hhDriver->fIbm3270Mode = TRUE;
 	hhDriver->fEscapeFF = FALSE;
-	hhDriver->cbTn3270Record = 0;
-	hhDriver->fTn3270E = FALSE;
-	hhDriver->fTn3270EReady = FALSE;
+	hhDriver->cbIbm3270Record = 0;
+	hhDriver->fIbm3270E = FALSE;
+	hhDriver->fIbm3270EReady = FALSE;
 
 	WinSockSendMessage(hhDriver, DO, TELOPT_TN3270E);
 	WinSockSendMessage(hhDriver, WILL, TELOPT_TN3270E);
@@ -174,6 +198,12 @@ VOID WinSockGotDO  (ST_STDCOM * hhDriver, const PSTOPT pstO)
 	{
 
 	DbgOutStr("Got DO: %lx\r\n", pstO->option, 0,0,0,0);
+	if (pstO->option == TELOPT_STARTTLS && !hhDriver->fStartTlsRequested)
+		{
+		WinSockSendMessage(hhDriver, WONT, pstO->option);
+		return;
+		}
+
 	switch (pstO->us)
 		{
 	case NO:
@@ -220,6 +250,9 @@ VOID WinSockGotDO  (ST_STDCOM * hhDriver, const PSTOPT pstO)
 	// on or off).
 	if ( pstO->option == TELOPT_NAWS )
 		WinSockSendNAWS( hhDriver );
+
+	if (pstO->option == TELOPT_STARTTLS && pstO->us == YES)
+		WinSockSendStartTlsFollows(hhDriver);
 	}
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -243,6 +276,12 @@ VOID WinSockGotDO  (ST_STDCOM * hhDriver, const PSTOPT pstO)
 VOID WinSockGotWILL(ST_STDCOM * hhDriver, const PSTOPT pstO)
 	{
 	DbgOutStr("Got WILL: %lx\r\n", pstO->option, 0,0,0,0);
+	if (pstO->option == TELOPT_STARTTLS && !hhDriver->fStartTlsRequested)
+		{
+		WinSockSendMessage(hhDriver, DONT, pstO->option);
+		return;
+		}
+
 	switch(pstO->him)
 		{
 	case NO:
@@ -281,8 +320,11 @@ VOID WinSockGotWILL(ST_STDCOM * hhDriver, const PSTOPT pstO)
 
 	default:
 		assert(FALSE);
-		break;
-		}
+			break;
+			}
+
+	if (pstO->option == TELOPT_STARTTLS && pstO->him == YES)
+		WinSockSendStartTlsFollows(hhDriver);
 	}
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -435,11 +477,12 @@ int FAR PASCAL WinSockNetworkVirtualTerminal(ECHAR mc, void *pD)
 	ST_STDCOM * hhDriver = (ST_STDCOM *)pD;
 #ifdef INCL_USER_DEFINED_BACKSPACE_AND_TELNET_TERMINAL_ID
     STEMUSET stEmuSet;
+	char achTermType[EMU_MAX_TELNETID];
 #else
 	int nTtype;
 #endif
 	LPSTR pszPtr;
-	UCHAR acTerm[64];
+	UCHAR acTerm[320];
 	HEMU  hEmu;
 	HSESSION hSession;
 	PSTOPT pstTelnetOpt;
@@ -482,7 +525,7 @@ int FAR PASCAL WinSockNetworkVirtualTerminal(ECHAR mc, void *pD)
 			return  NVT_DISCARD ;
 		case EOR:
 			hhDriver->NVTstate = NVT_THRU;
-			return WinSockIsTN3270(hhDriver) ? NVT_EOR : NVT_DISCARD;
+			return WinSockIsIbm3270(hhDriver) ? NVT_EOR : NVT_DISCARD;
 		case GA:
 		case EL:
 		case EC:
@@ -543,22 +586,28 @@ int FAR PASCAL WinSockNetworkVirtualTerminal(ECHAR mc, void *pD)
 		hhDriver->NVTstate = NVT_THRU;
 		return  NVT_DISCARD ;
 
-	case NVT_SB:
-		/* At this time we only handle one sub-negotiation */
-		switch (mc)
-			{
-		case TELOPT_TTYPE:
+		case NVT_SB:
+			/* At this time we only handle one sub-negotiation */
+			switch (mc)
+				{
+			case TELOPT_TTYPE:
 			hhDriver->NVTstate = NVT_SB_TT;
 			return  NVT_DISCARD ;
 		case TELOPT_TN3270E:
 			hhDriver->NVTstate = NVT_SB_TN3270E;
 			hhDriver->nSbOption = TELOPT_TN3270E;
-			hhDriver->nSbLen = 0;
-			hhDriver->fSbIac = FALSE;
-			return NVT_DISCARD;
-		default:
-			break;
-			}
+				hhDriver->nSbLen = 0;
+				hhDriver->fSbIac = FALSE;
+				return NVT_DISCARD;
+			case TELOPT_STARTTLS:
+				hhDriver->NVTstate = NVT_SB_STARTTLS;
+				hhDriver->nSbOption = TELOPT_STARTTLS;
+				hhDriver->nSbLen = 0;
+				hhDriver->fSbIac = FALSE;
+				return NVT_DISCARD;
+			default:
+				break;
+				}
 		hhDriver->NVTstate = NVT_THRU;
 		return NVT_KEEP;
 
@@ -591,7 +640,7 @@ int FAR PASCAL WinSockNetworkVirtualTerminal(ECHAR mc, void *pD)
 			{
 		case SE:
 			memset(acTerm, 0, sizeof(acTerm));
-			pszPtr = (LPSTR)acTerm;
+			pszPtr = (char *)acTerm;
 			*pszPtr++ = (UCHAR)IAC;
 			*pszPtr++ = (UCHAR)SB;
 			*pszPtr++ = (UCHAR)TELOPT_TTYPE;
@@ -609,67 +658,93 @@ int FAR PASCAL WinSockNetworkVirtualTerminal(ECHAR mc, void *pD)
             // user in the "Settings" properties page. - cab:11/18/96
             //
             emuQuerySettings(hEmu, &stEmuSet);
-            if (stEmuSet.nEmuId == EMU_TN3270 && stEmuSet.acTelnetId[0] == L'\0')
-                strcpy(pszPtr, "IBM-3278-2-E");
+            if (stEmuSet.nEmuId == EMU_IBM3270 && stEmuSet.acTelnetId[0] == L'\0')
+                WinSockProtocolStringCopy(pszPtr,
+						sizeof(acTerm) - (size_t)(pszPtr - (char *)acTerm),
+						"IBM-3278-2-E");
             else
-                strcpy(pszPtr, stEmuSet.acTelnetId);
+				{
+				WinSockWideToProtocolAscii(achTermType, sizeof(achTermType),
+						stEmuSet.acTelnetId);
+				WinSockProtocolStringCopy(pszPtr,
+						sizeof(acTerm) - (size_t)(pszPtr - (char *)acTerm),
+						achTermType[0] ? achTermType : "DEC-VT100");
+				}
 #else
 			nTtype = emuQueryEmulatorId(hEmu);
 			switch (nTtype)
 				{
 			case EMU_ANSI:
-				strcpy(pszPtr, "ANSI");
+				WinSockProtocolStringCopy(pszPtr,
+						sizeof(acTerm) - (size_t)(pszPtr - (char *)acTerm),
+						"ANSI");
 				break;
 			case EMU_TTY:
-				strcpy(pszPtr, "TELETYPE-33");
+				WinSockProtocolStringCopy(pszPtr,
+						sizeof(acTerm) - (size_t)(pszPtr - (char *)acTerm),
+						"TELETYPE-33");
 				break;
 			case EMU_VT52:
-				strcpy(pszPtr, "DEC-VT52");
+				WinSockProtocolStringCopy(pszPtr,
+						sizeof(acTerm) - (size_t)(pszPtr - (char *)acTerm),
+						"DEC-VT52");
 				break;
 			case EMU_VT100:
                 // strcpy(pszPtr, "VT100");
-                strcpy(pszPtr, "DEC-VT100");
+                WinSockProtocolStringCopy(pszPtr,
+						sizeof(acTerm) - (size_t)(pszPtr - (char *)acTerm),
+						"DEC-VT100");
 				break;
 #if defined(INCL_VT220)
 			case EMU_VT220:
                 // strcpy(pszPtr, "VT220");
-                strcpy(pszPtr, "DEC-VT220");
+                WinSockProtocolStringCopy(pszPtr,
+						sizeof(acTerm) - (size_t)(pszPtr - (char *)acTerm),
+						"DEC-VT220");
 				break;
 #endif
 #if defined(INCL_VT320)
 			case EMU_VT220:
                 // strcpy(pszPtr, "VT320");
-                strcpy(pszPtr, "DEC-VT320");
+                WinSockProtocolStringCopy(pszPtr,
+						sizeof(acTerm) - (size_t)(pszPtr - (char *)acTerm),
+						"DEC-VT320");
 				break;
 #endif
 
 #if defined(INCL_VT100PLUS)
 			case EMU_VT100PLUS:
                 // strcpy(pszPtr, "VT100");
-                strcpy(pszPtr, "DEC-VT100");
+                WinSockProtocolStringCopy(pszPtr,
+						sizeof(acTerm) - (size_t)(pszPtr - (char *)acTerm),
+						"DEC-VT100");
 				break;
 #endif
 
 #if defined(INCL_VTUTF8)
 			case EMU_VTUTF8:
-                strcpy(pszPtr, "VT-UTF8");
+                WinSockProtocolStringCopy(pszPtr,
+						sizeof(acTerm) - (size_t)(pszPtr - (char *)acTerm),
+						"VT-UTF8");
 				break;
 #endif
 
 			default:
-                strcpy(pszPtr, "DEC-VT100"); // "UNKNOWN");
+                WinSockProtocolStringCopy(pszPtr,
+						sizeof(acTerm) - (size_t)(pszPtr - (char *)acTerm),
+						"DEC-VT100"); // "UNKNOWN");
 				break;
 				}
 #endif
 
 			DbgOutStr("NVT: Terminal=%s", pszPtr, 0,0,0,0);
-			pszPtr = pszPtr + strlen(pszPtr);
+			pszPtr = pszPtr + lstrlenA(pszPtr);
 			*pszPtr++ = (UCHAR)IAC;
 			*pszPtr++ = (UCHAR)SE;
 
 			WinSockSendBuffer(hhDriver,
-				(INT)(pszPtr - (LPSTR)acTerm),
-				(LPSTR)acTerm);
+				(INT)(pszPtr - (char *)acTerm),
+				acTerm);
 			hhDriver->NVTstate = NVT_THRU;
 			return NVT_DISCARD ;
 		default:
@@ -684,7 +759,7 @@ int FAR PASCAL WinSockNetworkVirtualTerminal(ECHAR mc, void *pD)
 			hhDriver->fSbIac = FALSE;
 			if (mc == SE)
 				{
-				WinSockProcessTN3270ESubneg(hhDriver);
+				WinSockProcessIbm3270TelnetSubneg(hhDriver);
 				hhDriver->NVTstate = NVT_THRU;
 				return NVT_DISCARD;
 				}
@@ -703,11 +778,39 @@ int FAR PASCAL WinSockNetworkVirtualTerminal(ECHAR mc, void *pD)
 			return NVT_DISCARD;
 			}
 
-		WinSockAppendSubnegByte(hhDriver, (UCHAR)mc);
-		return NVT_DISCARD;
+			WinSockAppendSubnegByte(hhDriver, (UCHAR)mc);
+			return NVT_DISCARD;
 
-	default:
-		hhDriver->NVTstate = NVT_THRU;
+		case NVT_SB_STARTTLS:
+			if (hhDriver->fSbIac)
+				{
+				hhDriver->fSbIac = FALSE;
+				if (mc == SE)
+					{
+					WinSockProcessStartTlsSubneg(hhDriver);
+					hhDriver->NVTstate = NVT_THRU;
+					return NVT_DISCARD;
+					}
+				if (mc == IAC)
+					{
+					WinSockAppendSubnegByte(hhDriver, (UCHAR)IAC);
+					return NVT_DISCARD;
+					}
+				hhDriver->NVTstate = NVT_THRU;
+				return NVT_DISCARD;
+				}
+
+			if (mc == IAC)
+				{
+				hhDriver->fSbIac = TRUE;
+				return NVT_DISCARD;
+				}
+
+			WinSockAppendSubnegByte(hhDriver, (UCHAR)mc);
+			return NVT_DISCARD;
+
+		default:
+			hhDriver->NVTstate = NVT_THRU;
 		return NVT_KEEP;
 		}
 
@@ -719,7 +822,53 @@ static VOID WinSockAppendSubnegByte(ST_STDCOM *hhDriver, UCHAR ch)
 		hhDriver->abSbBuf[hhDriver->nSbLen++] = ch;
 	}
 
-static VOID WinSockProcessTN3270ESubneg(ST_STDCOM *hhDriver)
+static VOID WinSockSendStartTlsFollows(ST_STDCOM *hhDriver)
+	{
+	static const UCHAR acStartTlsFollows[] =
+		{
+		(UCHAR)IAC, (UCHAR)SB, (UCHAR)TELOPT_STARTTLS,
+		(UCHAR)TLS_STARTTLS_FOLLOWS, (UCHAR)IAC, (UCHAR)SE
+		};
+
+	if (hhDriver == 0 || !hhDriver->fStartTlsRequested ||
+			hhDriver->fStartTlsActive || hhDriver->fImplicitTlsActive)
+		return;
+
+	WinSockSendBuffer(hhDriver, (INT)sizeof(acStartTlsFollows),
+			acStartTlsFollows);
+	if (WsckStartTls(hhDriver) < 0)
+		{
+		hhDriver->fStartTlsRequested = 0;
+		hhDriver->fImplicitTlsRequested = 0;
+		}
+	else
+		{
+		WinSockMaybeStartIbm3270Telnet(hhDriver);
+		}
+	}
+
+static VOID WinSockProcessStartTlsSubneg(ST_STDCOM *hhDriver)
+	{
+	if (hhDriver == 0 || hhDriver->nSbLen < 1)
+		return;
+
+	if (!hhDriver->fStartTlsRequested ||
+			hhDriver->abSbBuf[0] != TLS_STARTTLS_FOLLOWS ||
+			hhDriver->fStartTlsActive || hhDriver->fImplicitTlsActive)
+		return;
+
+	if (WsckStartTls(hhDriver) < 0)
+		{
+		hhDriver->fStartTlsRequested = 0;
+		hhDriver->fImplicitTlsRequested = 0;
+		}
+	else
+		{
+		WinSockMaybeStartIbm3270Telnet(hhDriver);
+		}
+	}
+
+static VOID WinSockProcessIbm3270TelnetSubneg(ST_STDCOM *hhDriver)
 	{
 	HEMU hEmu;
 	UCHAR *buf;
@@ -734,67 +883,75 @@ static VOID WinSockProcessTN3270ESubneg(ST_STDCOM *hhDriver)
 	if (len >= 2 && buf[0] == UT_TN3270E_OP_SEND &&
 			buf[1] == UT_TN3270E_OP_DEVICE_TYPE)
 		{
-		WinSockSendTN3270DeviceType(hhDriver);
+		WinSockSendIbm3270DeviceType(hhDriver);
 		return;
 		}
 
 	if (len >= 2 && buf[0] == UT_TN3270E_OP_DEVICE_TYPE &&
 			buf[1] == UT_TN3270E_OP_IS)
 		{
-		hhDriver->fTn3270E = TRUE;
-		hhDriver->fTn3270EReady = TRUE;
+		hhDriver->fIbm3270E = TRUE;
+		hhDriver->fIbm3270EReady = TRUE;
 		hEmu = WinSockQueryEmu(hhDriver);
 		if (hEmu)
-			emuTn3270SetTelnetMode(hEmu, TRUE);
+			emuIbm3270SetTelnetMode(hEmu, TRUE);
 		return;
 		}
 
 	if (len >= 2 && buf[0] == UT_TN3270E_OP_FUNCTIONS &&
 			buf[1] == UT_TN3270E_OP_REQUEST)
 		{
-		WinSockSendTN3270Functions(hhDriver);
+		WinSockSendIbm3270Functions(hhDriver);
 		return;
 		}
 
 	if (len >= 2 && buf[0] == UT_TN3270E_OP_FUNCTIONS &&
 			buf[1] == UT_TN3270E_OP_IS)
 		{
-		hhDriver->fTn3270EReady = TRUE;
+		hhDriver->fIbm3270EReady = TRUE;
 		return;
 		}
 
 	if (buf[0] == UT_TN3270E_OP_REJECT)
 		{
-		hhDriver->fTn3270E = FALSE;
-		hhDriver->fTn3270EReady = FALSE;
+		hhDriver->fIbm3270E = FALSE;
+		hhDriver->fIbm3270EReady = FALSE;
 		hEmu = WinSockQueryEmu(hhDriver);
 		if (hEmu)
-			emuTn3270SetTelnetMode(hEmu, FALSE);
+			emuIbm3270SetTelnetMode(hEmu, FALSE);
 		}
 	}
 
-static VOID WinSockSendTN3270DeviceType(ST_STDCOM *hhDriver)
+static VOID WinSockSendIbm3270DeviceType(ST_STDCOM *hhDriver)
 	{
 	UCHAR out[256];
-	LPSTR term;
-	LPSTR lu;
+	char term[EMU_IBM3270_MAX_LUNAME];
+	char lu[EMU_IBM3270_MAX_LUNAME];
+	char telnet_id[EMU_MAX_TELNETID];
 	STEMUSET stEmuSet;
 	HEMU hEmu;
 	int pos;
 	int i;
 
 	memset(&stEmuSet, 0, sizeof(stEmuSet));
-	strcpy((LPSTR)stEmuSet.acTelnetId, "IBM-3278-2-E");
 	hEmu = WinSockQueryEmu(hhDriver);
 	if (hEmu)
 		emuQuerySettings(hEmu, &stEmuSet);
 
-	term = (LPSTR)stEmuSet.acTn3270DeviceName;
+	WinSockWideToProtocolAscii(term, sizeof(term),
+			stEmuSet.acIbm3270DeviceName);
 	if (term[0] == '\0')
-		term = (LPSTR)stEmuSet.acTelnetId;
-	if (term[0] == '\0')
-		term = "IBM-3278-2-E";
-	lu = (LPSTR)stEmuSet.acTn3270LuName;
+		{
+		WinSockWideToProtocolAscii(telnet_id, sizeof(telnet_id),
+				stEmuSet.acTelnetId);
+		if (telnet_id[0] != '\0')
+			{
+			WinSockProtocolStringCopy(term, sizeof(term), telnet_id);
+			}
+		else
+			WinSockProtocolStringCopy(term, sizeof(term), "IBM-3278-2-E");
+		}
+	WinSockWideToProtocolAscii(lu, sizeof(lu), stEmuSet.acIbm3270LuName);
 
 	pos = 0;
 	out[pos++] = (UCHAR)IAC;
@@ -813,10 +970,51 @@ static VOID WinSockSendTN3270DeviceType(ST_STDCOM *hhDriver)
 	out[pos++] = (UCHAR)IAC;
 	out[pos++] = (UCHAR)SE;
 
-	WinSockSendBuffer(hhDriver, pos, (LPSTR)out);
+	WinSockSendBuffer(hhDriver, pos, out);
 	}
 
-static VOID WinSockSendTN3270Functions(ST_STDCOM *hhDriver)
+static VOID WinSockWideToProtocolAscii(char *pszDest, int cchDest,
+		const WCHAR *pszSrc)
+	{
+	int i;
+	int j;
+	WCHAR ch;
+
+	if (pszDest == NULL || cchDest <= 0)
+		return;
+
+	pszDest[0] = '\0';
+	if (pszSrc == NULL)
+		return;
+
+	for (i = 0, j = 0; pszSrc[i] != L'\0' && j < cchDest - 1; ++i)
+		{
+		ch = pszSrc[i];
+		if (ch >= L' ' && ch <= L'~')
+			pszDest[j++] = (char)ch;
+		else if (ch > L'~')
+			pszDest[j++] = '?';
+		}
+	pszDest[j] = '\0';
+	}
+
+static VOID WinSockProtocolStringCopy(char *pszDest, size_t cchDest,
+		const char *pszSrc)
+	{
+	size_t i;
+
+	if (pszDest == NULL || cchDest == 0)
+		return;
+
+	if (pszSrc == NULL)
+		pszSrc = "";
+
+	for (i = 0; i + 1 < cchDest && pszSrc[i] != '\0'; ++i)
+		pszDest[i] = pszSrc[i];
+	pszDest[i] = '\0';
+	}
+
+static VOID WinSockSendIbm3270Functions(ST_STDCOM *hhDriver)
 	{
 	UCHAR out[18];
 	int pos;
@@ -836,7 +1034,7 @@ static VOID WinSockSendTN3270Functions(ST_STDCOM *hhDriver)
 	out[pos++] = (UCHAR)IAC;
 	out[pos++] = (UCHAR)SE;
 
-	WinSockSendBuffer(hhDriver, pos, (LPSTR)out);
+	WinSockSendBuffer(hhDriver, pos, out);
 	}
 
 
@@ -891,7 +1089,7 @@ VOID WinSockSendNAWS( ST_STDCOM *hhDriver )
 		achOutput[7] = (UCHAR)IAC;
 		achOutput[8] = (UCHAR)SE;
 
-		WinSockSendBuffer(hhDriver, sizeof(achOutput), (LPSTR)achOutput);
+		WinSockSendBuffer(hhDriver, sizeof(achOutput), achOutput);
 		}
 	}
 

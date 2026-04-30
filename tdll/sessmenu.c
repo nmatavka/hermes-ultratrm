@@ -200,10 +200,10 @@ void sessInitMenuPopupTransfer(const HSESSION hSession, const HMENU hMenu)
 	{
 	int nMode;
 	BOOL f;
-	BOOL fTn3270;
-	BOOL fTn3270Connected;
-	BOOL fTn5250;
-	BOOL fTn5250Connected;
+	BOOL fIbm3270;
+	BOOL fIbm3270Connected;
+	BOOL fIbm5250;
+	BOOL fIbm5250Connected;
 	int iCnctStatus;
 	VOID *pData;
 	MENUITEMINFO stM;
@@ -223,19 +223,19 @@ void sessInitMenuPopupTransfer(const HSESSION hSession, const HMENU hMenu)
 	MenuItemEnable(hMenu, IDM_ACTIONS_SEND, f);
 	MenuItemEnable(hMenu, IDM_ACTIONS_RCV, f);
 
-	fTn3270 = (emuQueryEmulatorId(sessQueryEmuHdl(hSession)) == EMU_TN3270);
-	fTn5250 = (emuQueryEmulatorId(sessQueryEmuHdl(hSession)) == EMU_TN5250);
+	fIbm3270 = (emuQueryEmulatorId(sessQueryEmuHdl(hSession)) == EMU_IBM3270);
+	fIbm5250 = (emuQueryEmulatorId(sessQueryEmuHdl(hSession)) == EMU_IBM5250);
 	iCnctStatus = cnctQueryStatus(sessQueryCnctHdl(hSession));
-	fTn3270Connected = (fTn3270 && iCnctStatus == CNCT_STATUS_TRUE);
-	fTn5250Connected = (fTn5250 && iCnctStatus == CNCT_STATUS_TRUE);
-	MenuItemEnable(hMenu, IDM_TN3270_INDFILE_SEND, f && fTn3270Connected);
-	MenuItemEnable(hMenu, IDM_TN3270_INDFILE_RECEIVE, f && fTn3270Connected);
-	MenuItemEnable(hMenu, IDM_TN3270_PRINTER_START, fTn3270Connected);
-	MenuItemEnable(hMenu, IDM_TN3270_PRINTER_STOP, fTn3270);
-	MenuItemEnable(hMenu, IDM_TN3270_SETTINGS, fTn3270);
-	MenuItemEnable(hMenu, IDM_TN5250_PRINTER_START, fTn5250Connected);
-	MenuItemEnable(hMenu, IDM_TN5250_PRINTER_STOP, fTn5250);
-	MenuItemEnable(hMenu, IDM_TN5250_SETTINGS, fTn5250);
+	fIbm3270Connected = (fIbm3270 && iCnctStatus == CNCT_STATUS_TRUE);
+	fIbm5250Connected = (fIbm5250 && iCnctStatus == CNCT_STATUS_TRUE);
+	MenuItemEnable(hMenu, IDM_IBM3270_INDFILE_SEND, f && fIbm3270Connected);
+	MenuItemEnable(hMenu, IDM_IBM3270_INDFILE_RECEIVE, f && fIbm3270Connected);
+	MenuItemEnable(hMenu, IDM_IBM3270_PRINTER_START, fIbm3270Connected);
+	MenuItemEnable(hMenu, IDM_IBM3270_PRINTER_STOP, fIbm3270);
+	MenuItemEnable(hMenu, IDM_IBM3270_SETTINGS, fIbm3270);
+	MenuItemEnable(hMenu, IDM_IBM5250_PRINTER_START, fIbm5250Connected);
+	MenuItemEnable(hMenu, IDM_IBM5250_PRINTER_STOP, fIbm5250);
+	MenuItemEnable(hMenu, IDM_IBM5250_SETTINGS, fIbm5250);
 
 	/*
 	 * This section is for the Capture Menu.  It is more of a pain.

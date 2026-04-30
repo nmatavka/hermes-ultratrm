@@ -7,7 +7,7 @@
  *	$Date: 10/05/98 12:35p $
  */
 
-#define	BANNER_DISPLAY_CLASS	"BannerDisplayClass"
+#define	BANNER_DISPLAY_CLASS	L"BannerDisplayClass"
 #define WACKER_VERSION			"0.10"
 #define BANNER_TIME 			4000
 

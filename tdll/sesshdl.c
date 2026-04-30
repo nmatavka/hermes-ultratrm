@@ -31,6 +31,7 @@
 #include <tdll/cloop.h>
 #include <tdll/errorbox.h>
 #include <tdll/tdll.h>
+#include <tdll/term.h>
 #include "ut_text.h"
 #include <term/res.h>
 #include <emu/emu.h>
@@ -329,7 +330,7 @@ BOOL InitializeSessionHandle(const HSESSION hSession, const HWND hwnd,
 
                 // mrw:10/7/96
                 //
-			    wsprintf(ach, achFormat, "");   // get rid of %s
+			    wsprintfW(ach, achFormat, L"");   // get rid of %s
 
                 LoadString(glblQueryDllHinst(), IDS_MB_TITLE_WARN,
                     achTitle, sizeof(achTitle)/sizeof(WCHAR));
@@ -353,8 +354,6 @@ BOOL InitializeSessionHandle(const HSESSION hSession, const HWND hwnd,
                     }
 				}
 
-			emuHomeHostCursor(hhSess->hEmu);
-			emuEraseTerminalScreen(hhSess->hEmu);
 			}
 
         if (hhSess->achSessName[0] == L'\0')
@@ -517,6 +516,10 @@ BOOL ReinitializeSessionHandle(const HSESSION hSession, const int fUpdateTitle)
 	WCHAR_Fill(hhSess->achSessCmdLn,
 				L'\0',
 				sizeof(hhSess->achSessCmdLn) / sizeof(WCHAR));
+	hhSess->iCmdLnDial = CMDLN_DIAL_OPEN;
+#if defined(INCL_WINSOCK)
+	hhSess->iTelnetPort = 0;
+#endif
 
 	// Make this a new connection
 	//
@@ -546,9 +549,11 @@ BOOL ReinitializeSessionHandle(const HSESSION hSession, const int fUpdateTitle)
 	PostMessage(hhSess->hwndStatusbar, SBR_NTFY_REFRESH,
 		(WPARAM)SBR_MAX_PARTS, 0);
 
-	// Refresh the terminal window - necessary - mrw:6/16/95
+	// Reset the terminal viewport to the live screen. A plain WM_SIZE
+	// recalculates geometry, but it does not reliably clear stale
+	// scroll/backscroll view state when reopening saved sessions.
 	//
-	SendMessage(hhSess->hwndTerm, WM_SIZE, 0, 0);
+	SendMessage(hhSess->hwndTerm, WM_TERM_FORCE_WMSIZE, 0, 0);
 	return TRUE;
 	}
 

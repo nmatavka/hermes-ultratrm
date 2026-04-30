@@ -94,11 +94,12 @@
 #define IDD_KEYSUMMARYDLG              2754
 #define IDD_KEYDLG                     2755
 #define IDD_TERMINAL_SIZE_AND_COLORS   2756
+#define IDD_REXX_PROMPT                2757
 #ifdef INCL_NAG_SCREEN
-#define IDD_NAG_SCREEN                 2757
-#define IDD_NAG_REGISTER               2758
-#define IDD_NAG_PURCHASE               2759
-#define IDD_REGISTRATION_REMINDER      2760
+#define IDD_NAG_SCREEN                 2758
+#define IDD_NAG_REGISTER               2759
+#define IDD_NAG_PURCHASE               2760
+#define IDD_REGISTRATION_REMINDER      2761
 #endif
 #define IDC_TERMINAL_SIZE_AND_COLORS    1005
 #define IDC_EDIT_ROWS                   1006
@@ -165,10 +166,17 @@
 #define IDC_BACK_WHITE                  1346
 #define IDC_TEXT_PREVIEW                1347
 #define IDC_PREVIEW_GROUPBOX            1348
+#define IDC_COLOR_THEME_LABEL           1352
+#define IDC_COLOR_THEME_COMBO           1353
+#define IDC_REXX_PROMPT_TEXT            1354
+#define IDC_REXX_PROMPT_EDIT            1355
+#define IDC_REXX_PROMPT_LIST            1356
 #define IDC_REGISTER_NOW                1349
 #define IDC_REGISTER_LATER              1350
 #define IDC_REGISTER_NOT                1351
+#ifndef IDC_STATIC
 #define IDC_STATIC                      -1
+#endif
 
 /* ---- from CNCTTAPI.RC ---- */
 
@@ -231,14 +239,14 @@
 #define IDM_ACTIONS_SEND_TEXT       406
 #define IDM_ACTIONS_WAIT_FOR_CALL   407
 #define IDM_ACTIONS_STOP_WAITING    408
-#define IDM_TN3270_INDFILE_SEND     409
-#define IDM_TN3270_INDFILE_RECEIVE  410
-#define IDM_TN3270_PRINTER_START    411
-#define IDM_TN3270_PRINTER_STOP     412
-#define IDM_TN3270_SETTINGS         413
-#define IDM_TN5250_PRINTER_START    414
-#define IDM_TN5250_PRINTER_STOP     415
-#define IDM_TN5250_SETTINGS         416
+#define IDM_IBM3270_INDFILE_SEND     409
+#define IDM_IBM3270_INDFILE_RECEIVE  410
+#define IDM_IBM3270_PRINTER_START    411
+#define IDM_IBM3270_PRINTER_STOP     412
+#define IDM_IBM3270_SETTINGS         413
+#define IDM_IBM5250_PRINTER_START    414
+#define IDM_IBM5250_PRINTER_STOP     415
+#define IDM_IBM5250_SETTINGS         416
 
 #define IDM_CAPTURE_STOP                420
 #define IDM_CAPTURE_PAUSE               421
@@ -686,8 +694,8 @@
 #define IDS_EMUNAME_VT320		940
 #define IDS_EMUNAME_VT100PLUS   941
 #define IDS_EMUNAME_VTUTF8		942
-#define IDS_EMUNAME_TN3270		943
-#define IDS_EMUNAME_TN5250		944
+#define IDS_EMUNAME_IBM3270		943
+#define IDS_EMUNAME_IBM5250		944
 #define IDS_EMUNAME_VIDEOTEX	945
 
 /* This is a special flag to make upgrade text localizable */

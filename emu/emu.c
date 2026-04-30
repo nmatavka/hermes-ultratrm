@@ -1284,10 +1284,10 @@ int emuCreateNameTable(const HHEMU hhEmu)
 	hhEmu->pstNameTable[idx].nEmuId = EMU_VTUTF8;
 #endif
 
-#if defined(INCL_TN3270)
-	// EMU_TN3270
+#if defined(INCL_IBM3270)
+	// EMU_IBM3270
 	//
-	iLen = LoadString(glblQueryDllHinst(), IDS_EMUNAME_TN3270, achText, sizeof(achText) / sizeof(WCHAR));
+	iLen = LoadString(glblQueryDllHinst(), IDS_EMUNAME_IBM3270, achText, sizeof(achText) / sizeof(WCHAR));
 
 	if (iLen >= EMU_MAX_NAMELEN)
 		{
@@ -1298,13 +1298,13 @@ int emuCreateNameTable(const HHEMU hhEmu)
 
 	idx++;
 	StrCharCopy(hhEmu->pstNameTable[idx].acName, achText);
-	hhEmu->pstNameTable[idx].nEmuId = EMU_TN3270;
+	hhEmu->pstNameTable[idx].nEmuId = EMU_IBM3270;
 #endif
 
-#if defined(INCL_TN5250)
-	// EMU_TN5250
+#if defined(INCL_IBM5250)
+	// EMU_IBM5250
 	//
-	iLen = LoadString(glblQueryDllHinst(), IDS_EMUNAME_TN5250, achText, sizeof(achText) / sizeof(WCHAR));
+	iLen = LoadString(glblQueryDllHinst(), IDS_EMUNAME_IBM5250, achText, sizeof(achText) / sizeof(WCHAR));
 
 	if (iLen >= EMU_MAX_NAMELEN)
 		{
@@ -1315,7 +1315,7 @@ int emuCreateNameTable(const HHEMU hhEmu)
 
 	idx++;
 	StrCharCopy(hhEmu->pstNameTable[idx].acName, achText);
-	hhEmu->pstNameTable[idx].nEmuId = EMU_TN5250;
+	hhEmu->pstNameTable[idx].nEmuId = EMU_IBM5250;
 #endif
 
 #if defined(INCL_VIDEOTEX)

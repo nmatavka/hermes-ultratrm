@@ -428,7 +428,9 @@ void vt52_toANSI(const HHEMU hhEmu)
 	#endif
 
 	if (!hhEmu)
+		{
 		assert(FALSE);
+		}
 	else
 		{
 		// Return to the original emu, not necessarily the VT100.

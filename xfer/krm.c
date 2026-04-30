@@ -160,7 +160,7 @@ void ksend_packet(ST_KRM *kc,
 	unsigned csum;
 	unsigned crc;
 	int i;
-	char *cp;
+	unsigned char *cp;
 
 	if (type == 'N' || type == 'E') /* wait for input to clear */
 		ComRcvBufrClear(kc->hCom);
@@ -193,7 +193,7 @@ void ksend_packet(ST_KRM *kc,
 	else
 		{
 		csum = 0;
-		cp = (char *)&pckt->plen;
+		cp = (unsigned char *)&pckt->plen;
 		for (i = dlength + 4; --i > 0; )
 			csum += *cp++;
 		/* cp is left pointing to first byte past data */
@@ -240,8 +240,8 @@ int krec_packet(ST_KRM *kc,
 				unsigned char *data)
 	{
 	WCHAR c = 0;
-	char *bp;
-	char hdr[3];
+	unsigned char *bp;
+	unsigned char hdr[3];
 	int done, got_hdr;
 	int cnt, i;
 	long j;
@@ -257,7 +257,7 @@ int krec_packet(ST_KRM *kc,
 	stime = startinterval();
 	while (c != (int)kc->k_markchar)
 		{
-		if (j = xfer_user_interrupt(kc->hSession))
+		if ((j = xfer_user_interrupt(kc->hSession)) != 0)
 			{
 			/* Yes, this is needed */
 			// XferAbort(kc->hSession, (LPVOID)((LPSTR)j));
@@ -299,7 +299,7 @@ int krec_packet(ST_KRM *kc,
 			// while ((c = mComRcvChar(comhdl)) == -1)
 			while (mComRcvChar(kc->hCom, &c) == 0)
 				{
-				if (j = xfer_user_interrupt(kc->hSession))
+				if ((j = xfer_user_interrupt(kc->hSession)) != 0)
 					{
 					// XferAbort(kc->hSession, (LPVOID)((LPSTR)j));
 					xfer_user_abort(kc->hSession, j);
